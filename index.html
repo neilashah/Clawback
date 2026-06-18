@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0F6E4E" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Clawback" />
+<title>Clawback</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='40' fill='%230F6E4E'/%3E%3Ctext x='50%25' y='54%25' font-size='110' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3E%24%3C/text%3E%3C/svg%3E" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root{
+  --paper:#F2F4F3; --surface:#FFFFFF; --ink:#15211C; --muted:#67726B; --line:#E2E7E3;
+  --vault:#0F6E4E; --vault-soft:#E5F1EB; --amber:#B45309;
+}
+*{box-sizing:border-box;}
+html,body{min-height:100%;}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:Inter,-apple-system,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;}
+
+.bt-wrap{max-width:520px;margin:0 auto;padding:max(22px,env(safe-area-inset-top)) 18px 60px;}
+
+.bt-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:10px;}
+.bt-eyebrow{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--vault);}
+.bt-head-actions{display:flex;gap:8px;}
+.bt-mini{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink);font-size:13px;font-weight:500;padding:8px 12px;border-radius:999px;cursor:pointer;font-family:inherit;}
+.bt-mini:hover{border-color:var(--vault);}
+.bt-mini.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.bt-iconbtn{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.bt-iconbtn:hover{border-color:var(--vault);}
+.bt-sync-status{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:14px;}
+.bt-help{font-size:13px;line-height:1.5;color:var(--muted);margin:0 0 12px;}
+.bt-divider{display:flex;align-items:center;text-align:center;color:var(--muted);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.08em;margin:20px 0 14px;gap:10px;}
+.bt-divider::before,.bt-divider::after{content:"";flex:1;height:1px;background:var(--line);}
+.bt-secondary{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--surface);
+  color:var(--ink);border:1px solid var(--line);border-radius:13px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;margin-top:10px;font-family:inherit;}
+.bt-secondary:hover{border-color:var(--vault);}
+.bt-codebox{min-height:70px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.4;word-break:break-all;}
+.bt-hint{background:var(--vault-soft);color:var(--vault);font-size:13px;line-height:1.45;
+  border-radius:12px;padding:11px 14px;margin-bottom:14px;}
+
+/* hero */
+.bt-hero{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px 22px 22px;margin-bottom:18px;}
+.bt-hero-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:54px;line-height:1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.bt-hero-label{font-size:15px;color:var(--muted);margin-top:8px;}
+.bt-bar{height:7px;border-radius:99px;background:var(--vault-soft);margin:18px 0 10px;overflow:hidden;}
+.bt-bar-fill{height:100%;background:var(--vault);border-radius:99px;transition:width .4s ease;}
+.bt-hero-sub{font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums;}
+
+/* annual fee recoup */
+.bt-fees{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 16px 6px;margin-bottom:18px;}
+.bt-fees-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:13px;}
+.bt-fee-row{margin-bottom:14px;}
+.bt-fee-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:7px;}
+.bt-fee-name{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.bt-fee-num{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;flex:none;}
+.bt-fee-pct{color:var(--muted);}
+.bt-fee-covered{color:var(--vault);font-weight:700;}
+.bt-fee-set{border:none;background:none;color:var(--vault);font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:underline;font-family:inherit;flex:none;}
+.bt-fee-bar{height:8px;border-radius:99px;background:var(--paper);overflow:hidden;}
+.bt-fee-fill{height:100%;border-radius:99px;transition:width .45s ease;min-width:2px;}
+
+/* filters */
+.bt-filters{display:flex;gap:8px;margin-bottom:14px;}
+.bt-chip{flex:1;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:13.5px;
+  font-weight:500;padding:9px 0;border-radius:11px;cursor:pointer;font-family:inherit;}
+.bt-chip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.bt-chip.dim{opacity:.4;cursor:not-allowed;}
+
+/* matrix */
+.bt-matrix{margin-bottom:16px;}
+.bt-cols{display:grid;gap:7px;position:sticky;top:0;z-index:5;background:var(--paper);padding:6px 0 8px;margin-bottom:2px;}
+.bt-colhead{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0 2px;min-width:0;}
+.bt-colhead .bt-dot{width:9px;height:9px;}
+.bt-colname{font-size:12.5px;font-weight:700;letter-spacing:-.01em;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+.bt-colsum{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;}
+.bt-band{margin-top:10px;}
+.bt-bandlabel{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:0 2px 6px;border-bottom:1px solid var(--line);margin-bottom:8px;}
+.bt-bandreset{font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--muted);font-variant-numeric:tabular-nums;}
+.bt-bandlabel.urgent,.bt-bandlabel.urgent .bt-bandreset{color:var(--amber);}
+.bt-cells{display:grid;gap:7px;align-items:start;}
+.bt-cell{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.bt-cell-empty{color:var(--line);font-size:18px;text-align:center;padding:6px 0;user-select:none;}
+.bt-tile{position:relative;text-align:left;border:1px solid;border-radius:12px;padding:9px 9px 8px;cursor:pointer;
+  font-family:inherit;display:flex;flex-direction:column;gap:2px;min-height:52px;transition:transform .08s ease;}
+.bt-tile:active{transform:scale(.97);}
+.bt-tile.used{opacity:.92;}
+.bt-tile-val{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;line-height:1;font-variant-numeric:tabular-nums;}
+.bt-tile-name{font-size:10.5px;line-height:1.25;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.bt-tile.used .bt-tile-name{color:#fff;text-decoration:line-through;text-decoration-color:rgba(255,255,255,.6);}
+.bt-tile-check{position:absolute;top:6px;right:6px;width:15px;height:15px;border-radius:50%;background:rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;}
+.bt-tile-edit{position:absolute;top:6px;right:6px;opacity:.8;}
+.bt-addtile{border:1px dashed var(--line);background:transparent;border-radius:12px;min-height:36px;display:flex;
+  align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-family:inherit;}
+.bt-addtile:hover{border-color:var(--vault);color:var(--vault);}
+
+.bt-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.bt-dot.lg{width:14px;height:14px;}
+.bt-edit{flex:none;width:34px;height:34px;border-radius:9px;border:none;background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.bt-edit:hover{background:var(--paper);color:var(--ink);}
+.bt-edit.danger:hover{color:#B91C1C;}
+.bt-none{text-align:center;color:var(--muted);font-size:14px;padding:26px 0;}
+
+/* buttons */
+.bt-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--vault);color:#fff;
+  border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;}
+.bt-add:hover{background:#0c5b40;}
+.bt-link{display:block;margin:14px auto 0;background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;text-decoration:underline;font-family:inherit;}
+
+/* empty */
+.bt-empty{text-align:center;padding:46px 14px;}
+.bt-empty-mark{width:64px;height:64px;border-radius:18px;background:var(--vault-soft);color:var(--vault);
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:34px;display:flex;align-items:center;justify-content:center;margin:0 auto 22px;}
+.bt-empty h2{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-.01em;}
+.bt-empty p{font-size:15px;color:var(--muted);line-height:1.55;max-width:330px;margin:0 auto 26px;}
+
+/* overlay + sheet */
+.bt-overlay{position:fixed;inset:0;background:rgba(20,33,28,.42);display:flex;align-items:flex-end;justify-content:center;z-index:50;animation:btFade .2s ease;}
+.bt-sheet{background:var(--surface);width:100%;max-width:520px;border-radius:22px 22px 0 0;max-height:92vh;overflow:auto;animation:btUp .26s cubic-bezier(.2,.8,.2,1);}
+@media(min-width:560px){.bt-overlay{align-items:center;}.bt-sheet{border-radius:22px;}}
+.bt-sheet-head{position:sticky;top:0;background:var(--surface);display:flex;align-items:center;justify-content:space-between;padding:20px 20px 12px;border-bottom:1px solid var(--line);}
+.bt-sheet-head h3{margin:0;font-size:18px;font-weight:600;}
+.bt-x{width:36px;height:36px;border-radius:10px;border:none;background:var(--paper);color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.bt-sheet-body{padding:18px 20px 28px;}
+
+/* form */
+.bt-f-label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 7px;}
+.bt-f-label:first-child{margin-top:0;}
+.bt-input{width:100%;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:16px;font-family:inherit;color:var(--ink);background:var(--surface);outline:none;}
+.bt-input:focus{border-color:var(--vault);box-shadow:0 0 0 3px var(--vault-soft);}
+select.bt-input{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2367726B' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;}
+.bt-money-input{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;padding:0 14px;background:var(--surface);}
+.bt-money-input:focus-within{border-color:var(--vault);box-shadow:0 0 0 3px var(--vault-soft);}
+.bt-money-input span{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;color:var(--muted);}
+.bt-input.bare{border:none;box-shadow:none;padding-left:6px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;}
+.bt-input.bare:focus{box-shadow:none;}
+.bt-seg{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.bt-seg-btn{border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;font-weight:500;padding:11px 0;border-radius:11px;cursor:pointer;font-family:inherit;}
+.bt-seg-btn.on{background:var(--vault-soft);color:var(--vault);border-color:var(--vault);font-weight:600;}
+.bt-swatches{display:flex;flex-wrap:wrap;gap:10px;}
+.bt-swatch{width:38px;height:38px;border-radius:11px;border:2px solid transparent;cursor:pointer;}
+.bt-swatch.on{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink);}
+.bt-primary{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--vault);color:#fff;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:600;cursor:pointer;margin-top:24px;font-family:inherit;}
+.bt-primary:hover{background:#0c5b40;}
+.bt-danger{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:none;color:#B91C1C;border:none;padding:14px;font-size:14px;font-weight:500;cursor:pointer;margin-top:6px;font-family:inherit;}
+.bt-card-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);}
+.bt-card-info{flex:1;min-width:0;}
+.bt-card-name{font-size:15.5px;font-weight:600;}
+.bt-card-count{font-size:12.5px;color:var(--muted);margin-top:2px;}
+
+@keyframes btFade{from{opacity:0;}to{opacity:1;}}
+@keyframes btUp{from{transform:translateY(24px);opacity:.4;}to{transform:translateY(0);opacity:1;}}
+@media(prefers-reduced-motion:reduce){.bt-overlay,.bt-sheet{animation:none;}.bt-bar-fill,.bt-fee-fill{transition:none;}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+
+/* ----------------------------- constants -------------------------------- */
+var KEY = "cc-benefits-data-v1";
+var FREQS = [
+  { id: "monthly", label: "Monthly" },
+  { id: "quarterly", label: "Quarterly" },
+  { id: "semiannual", label: "Semiannual" },
+  { id: "annual", label: "Annual" }
+];
+var CARD_COLORS = ["#0F6E4E","#1D4ED8","#7C3AED","#B91C1C","#B45309","#0E7490","#BE185D","#4D7C0F","#334155"];
+var FEE_BY_NAME = { "Sapphire Reserve":795, "Amex Platinum":895, "Delta Reserve":650 };
+
+/* ------------------------------- helpers -------------------------------- */
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function money(n){ return "$" + (Number(n)||0).toLocaleString("en-US",{maximumFractionDigits:0}); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];}); }
+function hexA(hex,a){ var h=hex.replace("#",""); return "rgba("+parseInt(h.slice(0,2),16)+","+parseInt(h.slice(2,4),16)+","+parseInt(h.slice(4,6),16)+","+a+")"; }
+
+function periodKey(freq,d){ d=d||new Date(); var y=d.getFullYear(),m=d.getMonth();
+  if(freq==="monthly") return y+"-"+String(m+1).padStart(2,"0");
+  if(freq==="quarterly") return y+"-Q"+(Math.floor(m/3)+1);
+  if(freq==="semiannual") return y+"-H"+(m<6?1:2);
+  return ""+y; }
+function nextReset(freq,d){ d=d||new Date(); var y=d.getFullYear(),m=d.getMonth();
+  if(freq==="monthly") return new Date(y,m+1,1);
+  if(freq==="quarterly") return new Date(y,(Math.floor(m/3)+1)*3,1);
+  if(freq==="semiannual") return new Date(y,m<6?6:12,1);
+  return new Date(y+1,0,1); }
+function daysUntil(date,from){ from=from||new Date();
+  var a=new Date(from.getFullYear(),from.getMonth(),from.getDate());
+  var b=new Date(date.getFullYear(),date.getMonth(),date.getDate());
+  return Math.round((b-a)/86400000); }
+function resetLabel(freq){ var n=daysUntil(nextReset(freq));
+  if(n<=0) return "Resets today";
+  if(n===1) return "Resets tomorrow";
+  if(n<=31) return "Resets in "+n+" days";
+  return "Resets in ~"+Math.round(n/30)+" mo"; }
+
+var ICONS = {
+  plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  pencil:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+  trash:'<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+  chevron:'<path d="m15 18-6-6 6-6"/>',
+  card:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  cloud:'<path d="M17.5 19a4.5 4.5 0 0 0 0-9 5.5 5.5 0 0 0-10.79 1.5A4 4 0 0 0 7 19z"/>'
+};
+function icon(name,size,color){ size=size||16; var stroke=color||"currentColor";
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+stroke+
+    '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block">'+ICONS[name]+'</svg>'; }
+
+/* ------------------------------- preset --------------------------------- */
+function mk(cardId,name,value,freq){ return {id:uid(),cardId:cardId,name:name,value:value,freq:freq,usage:{}}; }
+function buildPreset(){
+  var cards=[
+    {id:"csr",name:"Sapphire Reserve",color:"#1D4ED8",annualFee:795},
+    {id:"plat",name:"Amex Platinum",color:"#334155",annualFee:895},
+    {id:"delta",name:"Delta Reserve",color:"#B91C1C",annualFee:650}
+  ];
+  var benefits=[
+    mk("csr","Travel credit \u2726",300,"annual"),
+    mk("csr","The Edit hotel credit",500,"annual"),
+    mk("csr","Select hotel credit (2026)",250,"annual"),
+    mk("csr","Dining credit (Exclusive Tables)",150,"semiannual"),
+    mk("csr","StubHub / viagogo credit",150,"semiannual"),
+    mk("csr","DoorDash credit",25,"monthly"),
+    mk("csr","Lyft credit",10,"monthly"),
+    mk("csr","Peloton credit",10,"monthly"),
+    mk("plat","Resy dining credit",100,"quarterly"),
+    mk("plat","Hotel credit (FHR / THC)",300,"semiannual"),
+    mk("plat","lululemon credit",75,"quarterly"),
+    mk("plat","Digital entertainment credit",25,"monthly"),
+    mk("plat","Uber Cash",15,"monthly"),
+    mk("plat","Walmart+ credit",13,"monthly"),
+    mk("plat","Airline fee credit",200,"annual"),
+    mk("plat","CLEAR Plus credit",209,"annual"),
+    mk("plat","Equinox credit",300,"annual"),
+    mk("plat","Uber One credit",120,"annual"),
+    mk("plat","Oura Ring credit",200,"annual"),
+    mk("delta","Resy credit",20,"monthly"),
+    mk("delta","Rideshare credit",10,"monthly"),
+    mk("delta","Companion Certificate \u2726",0,"annual")
+  ];
+  return {cards:cards,benefits:benefits};
+}
+
+/* ----------------------------- persistence ------------------------------ */
+function load(){
+  try{
+    var raw=localStorage.getItem(KEY);
+    if(raw){ var d=JSON.parse(raw);
+      (d.cards||[]).forEach(function(c){ if(c.annualFee==null && FEE_BY_NAME[c.name]!=null) c.annualFee=FEE_BY_NAME[c.name]; });
+      return d;
+    }
+  }catch(e){}
+  return {cards:[],benefits:[]};
+}
+function persist(){ try{ localStorage.setItem(KEY,JSON.stringify(state.data)); }catch(e){} }
+function persistAndRender(){ state.data.updatedAt=Date.now(); persist(); render(); schedulePush(); }
+
+/* -------------------------------- state --------------------------------- */
+var state = { data: load(), filter:"available", editMode:false, modal:null, syncStatus:"off" };
+
+function isUsed(b){ return !!(b.usage && b.usage[periodKey(b.freq)]); }
+function findBenefit(id){ return state.data.benefits.filter(function(b){return b.id===id;})[0]; }
+function findCard(id){ return state.data.cards.filter(function(c){return c.id===id;})[0]; }
+
+function toggleUsed(b){
+  var k=periodKey(b.freq);
+  state.data.benefits=state.data.benefits.map(function(x){
+    if(x.id!==b.id) return x;
+    var u=Object.assign({},x.usage||{}); u[k]=!u[k]; return Object.assign({},x,{usage:u});
+  });
+  persistAndRender();
+}
+
+/* --------------------------- modal open helpers ------------------------- */
+function openBenefitAdd(cardId,freq){
+  state.modal={type:"benefit",id:null,fields:{name:"",value:"",freq:freq||"monthly",
+    cardId:cardId||(state.data.cards[0]&&state.data.cards[0].id)||"__new",newCardName:""}};
+  render();
+}
+function openBenefitEdit(b){
+  state.modal={type:"benefit",id:b.id,fields:{name:b.name,value:b.value,freq:b.freq,cardId:b.cardId,newCardName:""}};
+  render();
+}
+function openCardEdit(card){
+  state.modal={type:"cardEdit",id:card?card.id:null,
+    fields:{name:card?card.name:"",annualFee:card&&card.annualFee!=null?card.annualFee:"",color:card?card.color:CARD_COLORS[0]}};
+  render();
+}
+
+/* ------------------------------- save ops ------------------------------- */
+function saveBenefit(){
+  var f=state.modal.fields, cards=state.data.cards, cardId=f.cardId;
+  var creatingCard = f.cardId==="__new" || !state.data.cards.length;
+  if(creatingCard){
+    if(!f.newCardName.trim()) return;
+    var c={id:uid(),name:f.newCardName.trim(),color:CARD_COLORS[cards.length%CARD_COLORS.length],annualFee:0};
+    cards=cards.concat([c]); cardId=c.id;
+  }
+  if(!f.name.trim()) return;
+  var benefits;
+  if(state.modal.id){
+    benefits=state.data.benefits.map(function(b){
+      return b.id===state.modal.id ? Object.assign({},b,{name:f.name.trim(),value:Number(f.value)||0,freq:f.freq,cardId:cardId}) : b;
+    });
+  } else {
+    benefits=state.data.benefits.concat([{id:uid(),cardId:cardId,name:f.name.trim(),value:Number(f.value)||0,freq:f.freq,usage:{}}]);
+  }
+  state.data={cards:cards,benefits:benefits}; state.modal=null; persistAndRender();
+}
+function delBenefit(id){
+  state.data.benefits=state.data.benefits.filter(function(b){return b.id!==id;});
+  state.modal=null; persistAndRender();
+}
+function saveCard(){
+  var f=state.modal.fields; if(!f.name.trim()) return; var cards;
+  if(state.modal.id){
+    cards=state.data.cards.map(function(c){ return c.id===state.modal.id ?
+      Object.assign({},c,{name:f.name.trim(),color:f.color,annualFee:Number(f.annualFee)||0}) : c; });
+  } else {
+    cards=state.data.cards.concat([{id:uid(),name:f.name.trim(),color:f.color,annualFee:Number(f.annualFee)||0}]);
+  }
+  state.data=Object.assign({},state.data,{cards:cards}); state.modal={type:"cards"}; persistAndRender();
+}
+function delCard(id,name){
+  if(!confirm('Delete "'+name+'" and its benefits?')) return;
+  state.data={cards:state.data.cards.filter(function(c){return c.id!==id;}),
+    benefits:state.data.benefits.filter(function(b){return b.cardId!==id;})};
+  persistAndRender();
+}
+
+/* -------------------------------- sync ---------------------------------- */
+var SYNC_KEY="cc-sync-cfg-v1";
+var TABLE="benefits_state";
+var pushTimer=null;
+
+function syncCfg(){ try{ var r=localStorage.getItem(SYNC_KEY); return r?JSON.parse(r):null; }catch(e){ return null; } }
+function setSyncCfg(c){ if(c) localStorage.setItem(SYNC_KEY,JSON.stringify(c)); else localStorage.removeItem(SYNC_KEY); }
+function setStatus(s){ state.syncStatus=s; render(); }
+function statusColor(s){ return {off:"var(--muted)",ok:"var(--vault)",syncing:"var(--amber)",saving:"var(--amber)",error:"#B91C1C"}[s||"off"]; }
+function statusText(s){ return {off:"Not syncing",ok:"Synced",syncing:"Syncing\u2026",saving:"Saving\u2026",error:"Sync error \u2014 check settings"}[s||"off"]; }
+function randCode(){ var a="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789",s=""; for(var i=0;i<20;i++) s+=a[Math.floor(Math.random()*a.length)]; return s; }
+
+function encodeBundle(c){ try{ return "CCB1:"+btoa(unescape(encodeURIComponent(JSON.stringify({u:c.url,k:c.key,c:c.code})))); }catch(e){ return ""; } }
+function decodeBundle(str){ try{ var raw=String(str).trim().replace(/^CCB1:/,""); var o=JSON.parse(decodeURIComponent(escape(atob(raw)))); if(o.u&&o.k&&o.c) return {url:o.u,key:o.k,code:o.c}; }catch(e){} return null; }
+
+function apiBase(c){ return c.url.replace(/\/+$/,"")+"/rest/v1/"+TABLE; }
+function apiHeaders(c,extra){ return Object.assign({apikey:c.key,Authorization:"Bearer "+c.key},extra||{}); }
+
+function remotePull(){
+  var c=syncCfg(); if(!c) return Promise.resolve(null);
+  return fetch(apiBase(c)+"?id=eq."+encodeURIComponent(c.code)+"&select=data",{headers:apiHeaders(c)})
+    .then(function(r){ if(!r.ok) throw new Error("pull "+r.status); return r.json(); })
+    .then(function(arr){ return (arr&&arr[0])?arr[0].data:null; });
+}
+function remotePush(){
+  var c=syncCfg(); if(!c) return Promise.resolve();
+  var body=[{id:c.code,data:state.data,updated_at:new Date().toISOString()}];
+  return fetch(apiBase(c),{method:"POST",headers:apiHeaders(c,{"Content-Type":"application/json",Prefer:"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify(body)})
+    .then(function(r){ if(!r.ok) throw new Error("push "+r.status); });
+}
+function schedulePush(){
+  if(!syncCfg()) return;
+  setStatus("saving");
+  if(pushTimer) clearTimeout(pushTimer);
+  pushTimer=setTimeout(function(){
+    remotePush().then(function(){ setStatus("ok"); }).catch(function(){ setStatus("error"); });
+  },800);
+}
+function pullAndMerge(){
+  if(!syncCfg()) return Promise.resolve();
+  setStatus("syncing");
+  return remotePull().then(function(remote){
+    if(remote && Number(remote.updatedAt||0) > Number(state.data.updatedAt||0)){
+      state.data=remote; persist(); render();
+    }
+    setStatus("ok");
+  }).catch(function(){ setStatus("error"); });
+}
+function initSync(){
+  if(!syncCfg()){ setStatus("off"); return; }
+  setStatus("syncing");
+  remotePull().then(function(remote){
+    if(remote && Number(remote.updatedAt||0) > Number(state.data.updatedAt||0)){
+      state.data=remote; persist(); render(); setStatus("ok");
+    } else {
+      return remotePush().then(function(){ setStatus("ok"); });
+    }
+  }).catch(function(){ setStatus("error"); });
+}
+function connectSync(cfg){
+  if(!cfg.url||!cfg.key||!cfg.code) return false;
+  setSyncCfg({url:cfg.url.trim(),key:cfg.key.trim(),code:cfg.code.trim()});
+  initSync();
+  return true;
+}
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ alert("Device-link code copied. Paste it on your other device's Sync screen."); })
+      .catch(function(){ window.prompt("Copy this device-link code:",t); });
+  } else { window.prompt("Copy this device-link code:",t); }
+}
+
+/* ------------------------------- render --------------------------------- */
+function cellBenefits(freq,cardId){
+  return state.data.benefits.filter(function(b){return b.freq===freq && b.cardId===cardId;})
+    .filter(function(b){
+      if(state.editMode || state.filter==="all") return true;
+      return state.filter==="available" ? !isUsed(b) : isUsed(b);
+    })
+    .sort(function(a,b){
+      var ua=isUsed(a),ub=isUsed(b);
+      if(ua!==ub) return ua?1:-1;
+      return (Number(b.value)||0)-(Number(a.value)||0);
+    });
+}
+
+function dashboardHTML(){
+  var d=state.data;
+  if(!d.cards.length && !d.benefits.length){
+    return '<div class="bt-wrap"><div class="bt-empty">'+
+      '<div class="bt-empty-mark">$</div>'+
+      '<h2>Track every credit before it expires</h2>'+
+      '<p>Load your Sapphire Reserve, Amex Platinum, and Delta Reserve with their 2026 credits already filled in \u2014 then tap each one off as you use it.</p>'+
+      '<button class="bt-add" data-act="load-preset">'+icon("plus",18)+' Load my 3 cards</button>'+
+      '<button class="bt-link" data-act="start-scratch">Start from scratch instead</button>'+
+      '</div></div>';
+  }
+
+  var total=0, used=0;
+  d.benefits.forEach(function(b){ total+=Number(b.value)||0; if(isUsed(b)) used+=Number(b.value)||0; });
+  var available=total-used, pct=total>0?Math.round(used/total*100):0;
+
+  var remaining={}, recouped={};
+  d.cards.forEach(function(c){ remaining[c.id]=0; recouped[c.id]=0; });
+  var yearStr=String(new Date().getFullYear());
+  d.benefits.forEach(function(b){
+    var v=Number(b.value)||0;
+    if(!isUsed(b)) remaining[b.cardId]=(remaining[b.cardId]||0)+v;
+    if(v){ var u=b.usage||{}; var claims=Object.keys(u).filter(function(k){return u[k]&&(k===yearStr||k.indexOf(yearStr+"-")===0);}).length;
+      recouped[b.cardId]=(recouped[b.cardId]||0)+claims*v; }
+  });
+
+  var html='<div class="bt-wrap">';
+  html+='<header class="bt-head"><div class="bt-eyebrow">Clawback</div><div class="bt-head-actions">'+
+    '<button class="bt-iconbtn" data-act="open-sync" title="'+statusText(state.syncStatus)+'">'+icon("cloud",17,statusColor(state.syncStatus))+'</button>'+
+    '<button class="bt-mini '+(state.editMode?"on":"")+'" data-act="toggle-edit">'+icon("pencil",14)+' '+(state.editMode?"Done":"Edit")+'</button>'+
+    '<button class="bt-mini" data-act="open-cards">'+icon("card",15)+' Cards</button></div></header>';
+
+  html+='<section class="bt-hero"><div class="bt-hero-num">'+money(available)+'</div>'+
+    '<div class="bt-hero-label">still available to use</div>'+
+    '<div class="bt-bar"><div class="bt-bar-fill" style="width:'+pct+'%"></div></div>'+
+    '<div class="bt-hero-sub">You\u2019ve claimed '+money(used)+' of '+money(total)+' this cycle</div></section>';
+
+  html+='<section class="bt-fees"><div class="bt-fees-title">Annual fee recouped this year</div>';
+  d.cards.forEach(function(c){
+    var fee=Number(c.annualFee)||0, got=recouped[c.id]||0;
+    var p=fee>0?Math.min(100,Math.round(got/fee*100)):0, covered=fee>0&&got>=fee;
+    html+='<div class="bt-fee-row"><div class="bt-fee-top">'+
+      '<span class="bt-fee-name"><span class="bt-dot" style="background:'+c.color+'"></span>'+esc(c.name)+'</span>';
+    if(fee>0){ html+='<span class="bt-fee-num">'+money(got)+' / '+money(fee)+
+      (covered?'<span class="bt-fee-covered"> \u00b7 covered \u2713</span>':'<span class="bt-fee-pct"> \u00b7 '+p+'%</span>')+'</span>'; }
+    else { html+='<button class="bt-fee-set" data-act="set-fee">Set fee</button>'; }
+    html+='</div>';
+    if(fee>0){ html+='<div class="bt-fee-bar"><div class="bt-fee-fill" style="width:'+p+'%;background:'+(covered?"var(--vault)":c.color)+'"></div></div>'; }
+    html+='</div>';
+  });
+  html+='</section>';
+
+  html+='<div class="bt-filters">';
+  [["available","Available"],["used","Claimed"],["all","All"]].forEach(function(o){
+    html+='<button class="bt-chip '+(state.filter===o[0]?"on":"")+(state.editMode?" dim":"")+'" data-act="filter" data-val="'+o[0]+'"'+(state.editMode?" disabled":"")+'>'+o[1]+'</button>';
+  });
+  html+='</div>';
+
+  if(state.editMode){ html+='<div class="bt-hint">Edit mode \u2014 tap a benefit to change it, or tap + to add one. Changes save automatically.</div>'; }
+
+  var cols='repeat('+d.cards.length+',1fr)';
+  html+='<div class="bt-matrix"><div class="bt-cols" style="grid-template-columns:'+cols+'">';
+  d.cards.forEach(function(c){
+    html+='<div class="bt-colhead"><span class="bt-dot" style="background:'+c.color+'"></span>'+
+      '<span class="bt-colname">'+esc(c.name)+'</span>'+
+      '<span class="bt-colsum">'+money(remaining[c.id])+' left</span></div>';
+  });
+  html+='</div>';
+
+  FREQS.forEach(function(f){
+    var band=d.cards.map(function(c){ return cellBenefits(f.id,c.id); });
+    var hasAny=band.some(function(a){return a.length>0;});
+    if(!hasAny && !state.editMode) return;
+    var urgent=daysUntil(nextReset(f.id))<=7;
+    html+='<div class="bt-band"><div class="bt-bandlabel '+(urgent?"urgent":"")+'"><span>'+f.label+'</span><span class="bt-bandreset">'+resetLabel(f.id)+'</span></div>';
+    html+='<div class="bt-cells" style="grid-template-columns:'+cols+'">';
+    d.cards.forEach(function(c,ci){
+      html+='<div class="bt-cell">';
+      band[ci].forEach(function(b){
+        var u=isUsed(b);
+        var st=u?("background:"+c.color+";border-color:"+c.color):("background:"+hexA(c.color,.09)+";border-color:"+hexA(c.color,.22));
+        html+='<button class="bt-tile '+(u?"used":"")+'" data-act="tile" data-id="'+b.id+'" style="'+st+'">'+
+          '<span class="bt-tile-val" style="color:'+(u?"#fff":c.color)+'">'+money(b.value)+'</span>'+
+          '<span class="bt-tile-name">'+esc(b.name)+'</span>'+
+          (u?'<span class="bt-tile-check">'+icon("check",11,"#fff")+'</span>':'')+
+          (state.editMode?'<span class="bt-tile-edit">'+icon("pencil",11,u?"#fff":c.color)+'</span>':'')+
+          '</button>';
+      });
+      if(state.editMode){ html+='<button class="bt-addtile" data-act="add-cell" data-card="'+c.id+'" data-freq="'+f.id+'">'+icon("plus",14)+'</button>'; }
+      else if(band[ci].length===0){ html+='<span class="bt-cell-empty">\u00b7</span>'; }
+      html+='</div>';
+    });
+    html+='</div></div>';
+  });
+  html+='</div>';
+
+  if(!state.editMode){ html+='<button class="bt-add" data-act="add-blank">'+icon("plus",18)+' Add benefit</button>'; }
+  html+='</div>';
+  return html;
+}
+
+function sheet(title,body,backIcon){
+  return '<div class="bt-overlay" data-act="close-modal"><div class="bt-sheet" data-act="stop">'+
+    '<div class="bt-sheet-head"><h3>'+esc(title)+'</h3>'+
+    '<button class="bt-x" data-act="'+(backIcon?"back-cards":"close-modal")+'">'+icon(backIcon?"chevron":"x",20)+'</button></div>'+
+    '<div class="bt-sheet-body">'+body+'</div></div></div>';
+}
+
+function modalHTML(){
+  var m=state.modal, d=state.data;
+  if(m.type==="benefit"){
+    var f=m.fields, creatingCard=(f.cardId==="__new"||!d.cards.length);
+    var b='<label class="bt-f-label">Benefit</label>'+
+      '<input class="bt-input" placeholder="e.g. Dining credit" data-field="name" value="'+esc(f.name)+'">'+
+      '<label class="bt-f-label">Value</label>'+
+      '<div class="bt-money-input"><span>$</span><input class="bt-input bare" type="number" inputmode="decimal" placeholder="0" data-field="value" value="'+esc(f.value)+'"></div>'+
+      '<label class="bt-f-label">Resets</label><div class="bt-seg">'+
+      FREQS.map(function(x){return '<button class="bt-seg-btn '+(f.freq===x.id?"on":"")+'" data-act="seg" data-freq="'+x.id+'">'+x.label+'</button>';}).join("")+
+      '</div><label class="bt-f-label">Card</label>'+
+      '<select class="bt-input" data-field="cardId">'+
+      d.cards.map(function(c){return '<option value="'+c.id+'" '+(f.cardId===c.id?"selected":"")+'>'+esc(c.name)+'</option>';}).join("")+
+      '<option value="__new" '+(f.cardId==="__new"?"selected":"")+'>+ New card\u2026</option></select>'+
+      (creatingCard?'<input class="bt-input" style="margin-top:8px" placeholder="New card name" data-field="newCardName" value="'+esc(f.newCardName)+'">':'')+
+      '<button class="bt-primary" data-act="save-benefit">'+(m.id?"Save changes":"Add benefit")+'</button>'+
+      (m.id?'<button class="bt-danger" data-act="del-benefit" data-id="'+m.id+'">'+icon("trash",15)+' Delete benefit</button>':'');
+    return sheet(m.id?"Edit benefit":"Add benefit",b,false);
+  }
+  if(m.type==="cards"){
+    var counts={}; d.benefits.forEach(function(x){counts[x.cardId]=(counts[x.cardId]||0)+1;});
+    var b=(d.cards.length?"":'<div class="bt-none">No cards yet.</div>');
+    d.cards.forEach(function(c){
+      var n=counts[c.id]||0;
+      b+='<div class="bt-card-row"><span class="bt-dot lg" style="background:'+c.color+'"></span>'+
+        '<div class="bt-card-info"><div class="bt-card-name">'+esc(c.name)+'</div>'+
+        '<div class="bt-card-count">'+n+' benefit'+(n===1?"":"s")+(c.annualFee?' \u00b7 '+money(c.annualFee)+'/yr':'')+'</div></div>'+
+        '<button class="bt-edit" data-act="edit-card" data-id="'+c.id+'">'+icon("pencil",15)+'</button>'+
+        '<button class="bt-edit danger" data-act="del-card" data-id="'+c.id+'" data-name="'+esc(c.name)+'">'+icon("trash",15)+'</button></div>';
+    });
+    b+='<button class="bt-primary" data-act="add-card">'+icon("plus",16)+' Add card</button>'+
+       '<button class="bt-link" style="margin-top:16px" data-act="reload-preset">Reload my 3 preset cards</button>';
+    return sheet("Your cards",b,false);
+  }
+  if(m.type==="cardEdit"){
+    var f2=m.fields;
+    var b='<label class="bt-f-label">Card name</label>'+
+      '<input class="bt-input" placeholder="e.g. Sapphire Reserve" data-field="name" value="'+esc(f2.name)+'">'+
+      '<label class="bt-f-label">Annual fee</label>'+
+      '<div class="bt-money-input"><span>$</span><input class="bt-input bare" type="number" inputmode="decimal" placeholder="0" data-field="annualFee" value="'+esc(f2.annualFee)+'"></div>'+
+      '<label class="bt-f-label">Color</label><div class="bt-swatches">'+
+      CARD_COLORS.map(function(col){return '<button class="bt-swatch '+(f2.color===col?"on":"")+'" style="background:'+col+'" data-act="swatch" data-color="'+col+'"></button>';}).join("")+
+      '</div><button class="bt-primary" data-act="save-card">'+(m.id?"Save card":"Add card")+'</button>';
+    return sheet(m.id?"Edit card":"New card",b,true);
+  }
+  if(m.type==="sync"){
+    var f3=m.fields, cfg=syncCfg(), connected=!!cfg;
+    var b='<div class="bt-sync-status"><span class="bt-dot" style="background:'+statusColor(state.syncStatus)+'"></span> '+statusText(state.syncStatus)+'</div>';
+    if(connected){
+      b+='<p class="bt-help">This device is connected. Open this Sync screen on another device and paste your device-link code (or enter the same details) to keep them in sync.</p>'+
+        '<button class="bt-secondary" data-act="copy-link">'+icon("cloud",15)+' Copy device-link code</button>'+
+        '<button class="bt-secondary" data-act="sync-now">Sync now</button>'+
+        '<button class="bt-danger" data-act="sync-disconnect">'+icon("trash",15)+' Disconnect this device</button>'+
+        '<div class="bt-divider">edit connection</div>';
+    } else {
+      b+='<p class="bt-help">Paste a device-link code from a device you\u2019ve already set up:</p>'+
+        '<textarea class="bt-input bt-codebox" placeholder="CCB1:\u2026" data-field="bundle">'+esc(f3.bundle)+'</textarea>'+
+        '<button class="bt-secondary" data-act="quick-connect">Connect with code</button>'+
+        '<div class="bt-divider">or set up the first device</div>';
+    }
+    b+='<label class="bt-f-label">Supabase project URL</label>'+
+      '<input class="bt-input" placeholder="https://xxxx.supabase.co" data-field="url" value="'+esc(f3.url)+'">'+
+      '<label class="bt-f-label">Supabase anon key</label>'+
+      '<input class="bt-input" placeholder="eyJhbGc\u2026" data-field="key" value="'+esc(f3.key)+'">'+
+      '<label class="bt-f-label">Sync code (your private key)</label>'+
+      '<input class="bt-input" placeholder="your private code" data-field="code" value="'+esc(f3.code)+'">'+
+      '<button class="bt-secondary" data-act="gen-code">Generate a random sync code</button>'+
+      '<button class="bt-primary" data-act="save-sync">'+(connected?"Save changes":"Connect")+'</button>'+
+      '<p class="bt-help" style="margin-top:14px">Your URL and key are stored only in this browser, never in the app file. Anyone with all three values can read this list, so keep your sync code private.</p>';
+    return sheet("Cross-device sync",b,false);
+  }
+  return "";
+}
+
+function render(){
+  document.getElementById("app").innerHTML = dashboardHTML() + (state.modal?modalHTML():"");
+}
+
+/* ------------------------------ listeners ------------------------------- */
+document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-act]"); if(!t) return;
+  var a=t.dataset.act;
+  if(a==="stop") return;
+  if(a==="close-modal"){ state.modal=null; render(); return; }
+  if(a==="toggle-edit"){ state.editMode=!state.editMode; render(); return; }
+  if(a==="open-cards"){ state.modal={type:"cards"}; render(); return; }
+  if(a==="open-sync"){ var sc=syncCfg()||{}; state.modal={type:"sync",fields:{url:sc.url||"",key:sc.key||"",code:sc.code||"",bundle:""}}; render(); return; }
+  if(a==="gen-code"){ state.modal.fields.code=randCode(); render(); return; }
+  if(a==="quick-connect"){ var dec=decodeBundle(state.modal.fields.bundle); if(!dec){ alert("That device-link code wasn\u2019t valid. Copy it again from your other device."); return; } if(connectSync(dec)){ state.modal={type:"sync",fields:{url:dec.url,key:dec.key,code:dec.code,bundle:""}}; render(); } return; }
+  if(a==="save-sync"){ var fl=state.modal.fields; if(!fl.url||!fl.key||!fl.code){ alert("Please fill in the URL, key, and a sync code."); return; } connectSync(fl); state.modal={type:"sync",fields:{url:fl.url.trim(),key:fl.key.trim(),code:fl.code.trim(),bundle:""}}; render(); return; }
+  if(a==="sync-now"){ pullAndMerge(); return; }
+  if(a==="copy-link"){ var cc=syncCfg(); if(cc) copyText(encodeBundle(cc)); return; }
+  if(a==="sync-disconnect"){ if(confirm("Disconnect sync on this device? Your data stays here, but changes will no longer sync.")){ setSyncCfg(null); state.modal=null; setStatus("off"); } return; }
+  if(a==="set-fee"){ state.modal={type:"cards"}; render(); return; }
+  if(a==="filter"){ if(state.editMode) return; state.filter=t.dataset.val; render(); return; }
+  if(a==="tile"){ var b=findBenefit(t.dataset.id); if(!b) return; if(state.editMode) openBenefitEdit(b); else toggleUsed(b); return; }
+  if(a==="add-cell"){ openBenefitAdd(t.dataset.card,t.dataset.freq); return; }
+  if(a==="add-blank"||a==="start-scratch"){ openBenefitAdd(null,null); return; }
+  if(a==="load-preset"){ state.data=buildPreset(); persistAndRender(); return; }
+  if(a==="seg"){ state.modal.fields.freq=t.dataset.freq; render(); return; }
+  if(a==="save-benefit"){ saveBenefit(); return; }
+  if(a==="del-benefit"){ delBenefit(t.dataset.id); return; }
+  if(a==="edit-card"){ openCardEdit(findCard(t.dataset.id)); return; }
+  if(a==="del-card"){ delCard(t.dataset.id,t.dataset.name); return; }
+  if(a==="add-card"){ openCardEdit(null); return; }
+  if(a==="back-cards"){ state.modal={type:"cards"}; render(); return; }
+  if(a==="save-card"){ saveCard(); return; }
+  if(a==="swatch"){ state.modal.fields.color=t.dataset.color; render(); return; }
+  if(a==="reload-preset"){ if(confirm("Replace everything with the preset Sapphire Reserve, Amex Platinum, and Delta Reserve credits? This clears your current entries.")){ state.data=buildPreset(); persistAndRender(); } return; }
+});
+
+document.addEventListener("input",function(e){
+  var t=e.target.closest("[data-field]"); if(!t||!state.modal||!state.modal.fields) return;
+  state.modal.fields[t.dataset.field]=t.value;
+});
+document.addEventListener("change",function(e){
+  var t=e.target.closest("[data-field]"); if(!t||!state.modal||!state.modal.fields) return;
+  state.modal.fields[t.dataset.field]=t.value;
+  if(t.dataset.field==="cardId") render();
+});
+
+/* installable manifest (best-effort, single-file) */
+try{
+  var man={name:"Clawback",short_name:"Clawback",display:"standalone",
+    background_color:"#F2F4F3",theme_color:"#0F6E4E",start_url:".",
+    icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Crect width='512' height='512' rx='112' fill='%230F6E4E'/%3E%3Ctext x='50%25' y='55%25' font-size='320' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3E%24%3C/text%3E%3C/svg%3E",sizes:"512x512",type:"image/svg+xml"}]};
+  var ml=document.createElement("link"); ml.rel="manifest";
+  ml.href=URL.createObjectURL(new Blob([JSON.stringify(man)],{type:"application/json"}));
+  document.head.appendChild(ml);
+}catch(e){}
+
+render();
+initSync();
+document.addEventListener("visibilitychange",function(){ if(!document.hidden) pullAndMerge(); });
+</script>
+</body>
+</html>
