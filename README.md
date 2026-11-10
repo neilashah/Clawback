@@ -1,55 +1,44 @@
 # Clawback
 
-Track premium credit-card statement credits, auto-detect the ones you've used from your card transactions (via Plaid), and see how much of each annual fee you've earned back.
+Track premium credit-card statement credits, auto-detect the ones you've used from your card transactions, and see how much of each annual fee you've earned back.
 
-**Stack:** Next.js 16 (App Router, TypeScript) · Supabase (magic-link auth + Postgres with row-level security) · Plaid Transactions · hosted on Vercel.
+**Stack:** Next.js 16 (App Router, TypeScript) · Supabase (magic-link auth + Postgres with row-level security) · SimpleFIN Bridge (bank transactions) and/or CSV upload · hosted on Vercel.
 
 ## Setup
 
 ### 1. Supabase
-1. Use your existing Supabase project (or create one).
-2. **SQL editor:** run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql).
-3. **Authentication → URL Configuration:** set *Site URL* to your deployed URL and add `http://localhost:3000/**` and `https://<your-app>.vercel.app/**` to *Redirect URLs*.
-4. **Authentication → Sign In / Providers:** keep Email enabled. Once you and your family have each signed in once, turn off **Allow new users to sign up**. `ALLOWED_EMAILS` also blocks anyone not on the list.
-5. Copy the project URL, anon key, and service-role key from **Project Settings → API**.
+1. **SQL editor:** run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_simplefin_csv.sql`](supabase/migrations/0002_simplefin_csv.sql).
+2. **Authentication → URL Configuration:** set *Site URL* to your deployed URL and add `https://<your-app>.vercel.app/**` to *Redirect URLs*.
+3. Once everyone has signed in, turn off **Allow new users to sign up**. `ALLOWED_EMAILS` also blocks anyone not on the list.
 
-### 2. Plaid
-1. Sign up at [dashboard.plaid.com](https://dashboard.plaid.com) and copy your **Sandbox** client ID and secret.
-2. Sandbox only has fake banks. To connect your real Chase and Amex accounts, request **Production** access in the dashboard (Chase also requires OAuth registration; set `PLAID_REDIRECT_URI` to `https://<your-app>/oauth` and add it under *Allowed redirect URIs*).
+### 2. Vercel
+Import the repo and set the variables from [`.env.example`](.env.example). `vercel.json` schedules a daily sync at `/api/cron/sync`, authorized with `CRON_SECRET`.
 
-### 3. Environment
-```bash
-cp .env.example .env.local   # fill in every value
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"   # → PLAID_TOKEN_KEY
-```
+### 3. Bank data
+- **SimpleFIN Bridge** (automatic, ~$15/yr): sign up at simplefin.org, add your banks there, create a **setup token**, and paste it into Clawback's bank screen. It's claimed once and stored encrypted.
+- **CSV** (manual, free): download transactions from Chase or Amex as CSV and upload them on the bank screen for that card.
 
-### 4. Run
+Then open **Cards** and link each card to its account (CSV uploads link automatically).
+
+## Local development
 ```bash
 npm install
-npm run dev        # http://localhost:3000
-npm test           # detection unit tests
-npm run typecheck
+cp .env.example .env.local   # fill in
+npm run dev
+npm test && npm run typecheck && npm run build
 ```
 
-### 5. Deploy (Vercel)
-Import the repo in Vercel, add the same environment variables, deploy. Set `PLAID_WEBHOOK_URL` to `https://<your-app>.vercel.app/api/plaid/webhook` so new transactions arrive without pressing *Sync now*.
-
-## Using it
-1. Sign in with the emailed link → **Load my 3 cards** (or **Import from the old Clawback** with your old device-link code).
-2. Bank icon → **Connect a card account** → sign in to Amex / Chase through Plaid.
-   *Sandbox:* pick any bank, user `user_transactions_dynamic`, any password.
-3. **Cards** → edit each card → choose its **Linked account**.
-4. Statement credits whose description contains a benefit's **auto-detect phrases** tick that benefit off (tiles show **AUTO**). Unmatched credits appear under **Credits to review**, where you assign them once and Clawback remembers the description.
-5. Tapping an auto-claimed tile un-ticks it and keeps it un-ticked across future syncs.
-
 ## How detection works
-- Only **posted credits** (negative Plaid amounts, excluding payments) on an account linked to a card are considered.
+- Only **posted credits** (money in, excluding payments) on an account linked to a card are considered.
 - A credit matches the benefit on that card with the longest matching phrase (`|`-separated, case-insensitive).
-- Each benefit gets one claim per period (`2026-11`, `2026-Q4`, `2026-H2`, `2026`); partial credits in the same period are summed.
-- Auto claims count their actual credited amount (capped at the benefit value) toward the annual-fee bar; manual claims count full value.
-- Credits applied inside partner apps (Uber Cash, DoorDash, Lyft) never appear on the statement, so those stay manual.
+- Each benefit gets one claim per period (`2026-11`, `2026-Q4`, `2026-H2`, `2026`); partial credits in a period are summed.
+- Auto claims count their credited amount (capped at the benefit value) toward the annual-fee bar; manual claims count full value.
+- Unmatched credits show under **Credits to review**. Assigning one can remember its description for next time.
+- Credits applied inside partner apps (Uber Cash, DoorDash, Lyft) never appear on statements, so those stay manual.
 
-## Security notes
-- Plaid access tokens are AES-256-GCM encrypted (`PLAID_TOKEN_KEY`) and the column is not readable by the browser.
-- All tables use RLS scoped to `auth.uid()`; Plaid tables are written only by server routes using the service role.
-- The webhook verifies Plaid's signed JWT and body hash.
+## Sync details
+- First SimpleFIN sync requests transactions from Jan 1 in 60-day windows; later syncs overlap 14 days. Bridge allows roughly 24 requests a day, so app-open syncs are throttled to every 12h and **Sync now** to every 10 minutes.
+- CSV rows get stable IDs (re-uploading is safe), and rows already present from SimpleFIN (same amount within ±3 days) are skipped.
+
+## Security
+See [`SECURITY.md`](SECURITY.md).

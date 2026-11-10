@@ -2,10 +2,11 @@ import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 function key(): Buffer {
-  const raw = process.env.PLAID_TOKEN_KEY;
-  if (!raw) throw new Error("PLAID_TOKEN_KEY is not set");
+  // ENCRYPTION_KEY preferred; PLAID_TOKEN_KEY accepted for existing deployments.
+  const raw = process.env.ENCRYPTION_KEY || process.env.PLAID_TOKEN_KEY;
+  if (!raw) throw new Error("ENCRYPTION_KEY is not set");
   const k = Buffer.from(raw, "base64");
-  if (k.length !== 32) throw new Error("PLAID_TOKEN_KEY must be 32 bytes (base64)");
+  if (k.length !== 32) throw new Error("ENCRYPTION_KEY must be 32 bytes (base64)");
   return k;
 }
 

@@ -12,3 +12,13 @@ Append-only. Newest at the bottom.
 - Added auto-detection of used credits from statement-credit descriptions (per-benefit phrases), a review list for unmatched credits, and dismissible auto claims.
 - Added import from v1 via device-link code, plus a sandbox tool to post fake statement credits.
 - Unit tests for detection (`npm test`).
+
+## Nov 10, 2026, 2:54 PM ET — Security policy
+- Added `SECURITY.md`: written information security policy (access control, encryption, secrets, monitoring, incident response, retention).
+
+## Nov 10, 2026, 3:51 PM ET — Replace Plaid with SimpleFIN + CSV
+- Removed Plaid (routes, SDK, OAuth page). Production approval required a business-grade security review.
+- Added SimpleFIN Bridge: paste a setup token, access URL stored encrypted, sync on app open (12h throttle), "Sync now", and a daily Vercel Cron job.
+- Added CSV upload for Chase and Amex exports, with stable IDs and dedupe against SimpleFIN rows.
+- Migration `0002_simplefin_csv.sql`: drops Plaid tables; adds `bank_connections`, `bank_accounts`, `transactions`; renames `cards.plaid_account_id` → `account_id`; claim source `plaid` → `auto`.
+- Updated README, SECURITY.md, `.env.example` (`ENCRYPTION_KEY`, `CRON_SECRET`). Tests: 22 passing.
