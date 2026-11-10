@@ -12,3 +12,6 @@ Append-only. Newest at the bottom.
 - Added auto-detection of used credits from statement-credit descriptions (per-benefit phrases), a review list for unmatched credits, and dismissible auto claims.
 - Added import from v1 via device-link code, plus a sandbox tool to post fake statement credits.
 - Unit tests for detection (`npm test`).
+
+## Nov 10, 2026, 2:54 PM ET — Security policy
+- Added `SECURITY.md`: written information security policy (access control, encryption, secrets, monitoring, incident response, retention).
