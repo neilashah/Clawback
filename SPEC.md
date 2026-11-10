@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Oct 29, 2026, 10:46 AM ET)
+# Clawback — SPEC (as of Nov 10, 2026, 8:47 AM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -7,106 +7,99 @@
 
 **Clawback** is a personal web app for tracking premium credit-card benefits/statement credits — which have been used and which are still available — plus how much of each card's annual fee has been "recouped." Goal: stop leaving credits on the table across several premium travel cards.
 
-It is a **single self-contained `index.html`**: vanilla JS + HTML + CSS, no framework, no build step, no runtime dependencies (Google Fonts load with a system fallback, so it works offline). Opens locally, hosts on any static host, installs to a phone home screen as a PWA.
+**v2 (current)** is a Next.js app with login and **Plaid** integration that auto-detects used credits from card transactions. v1 (single-file `index.html`, localStorage + optional Supabase blob sync) is kept in `legacy/` for reference.
 
 ## Current status
 
-- App is named **Clawback** (browser title, in-app wordmark, PWA/home-screen name; green "$" icon).
-- Core features complete: benefit grid, annual-fee recoup bars, optional Supabase sync.
-- **Repo was accidentally deleted and is being recovered** (GitHub 90-day restore, or new repo + re-upload of `index.html` + re-enable Pages). Supabase data is unaffected.
-- Supabase project + table already exist from a prior session; reconnecting is just re-entering URL/key/sync code (or pasting a device-link code).
+- v2 code complete on branch `claude/peaceful-carson-fbum4j`; typecheck, unit tests, and production build pass; UI verified against a mocked Supabase.
+- **Not yet deployed.** Needs: Supabase migration run, env vars, Vercel project, Plaid account (Sandbox first; Production access requires applying to Plaid; Chase additionally needs OAuth registration).
+- Audience: just the owner + family (`ALLOWED_EMAILS` allowlist; disable Supabase sign-ups after first logins).
+- Old data migrates via **Import from the old Clawback** (paste v1 device-link `CCB1:` code).
 
 ## Tech stack & files
 
-- `index.html` — the entire app (HTML + inline `<style>` + inline `<script>`). **Hard rule: keep it one file.**
-- `SPEC.md` — this document.
-- `CHANGELOG.md` — append-only history.
-- Hosting: static only (GitHub Pages or Netlify). Sync runs through Supabase, so the host never needs a backend.
-
-## Data model
+- **Next.js 16** (App Router, TypeScript, React 19). Note: Next 16 uses `proxy.ts` (renamed from `middleware.ts`).
+- **Supabase**: magic-link Auth + Postgres with RLS. `@supabase/ssr` for cookie sessions.
+- **Plaid** `plaid` SDK v51 (new `PlaidClient` API: `plaid.link.createToken`, `plaid.transactions.sync`, …) + `react-plaid-link`.
+- **Hosting**: Vercel (server routes required for Plaid secrets/webhooks).
 
 ```
-data = {
-  cards:    [ { id, name, color, annualFee } ],
-  benefits: [ { id, cardId, name, value, freq, usage: {} } ],
-  updatedAt: <ms timestamp>
-}
+app/
+  page.tsx                 server: auth gate → <Dashboard>
+  login/, auth/callback/, auth/signout/   magic-link flow
+  oauth/                   Plaid OAuth return (Chase)
+  api/plaid/link-token     create Link token
+  api/plaid/exchange       public_token → encrypted access_token, accounts, first sync
+  api/plaid/sync           manual "Sync now" (all items)
+  api/plaid/webhook        verified Plaid webhook → syncItem on SYNC_UPDATES_AVAILABLE
+  api/plaid/items/[itemId] DELETE: disconnect bank
+  api/plaid/sandbox-credit sandbox-only: inject a fake statement credit
+  api/detect               re-run matching + claim reconciliation
+components/Dashboard.tsx   main UI (port of v1 grid/hero/fee bars + bank sheet + review list)
+components/ConnectBank.tsx Plaid Link button + OAuth resume
+lib/detect.ts              pure matching/reconcile logic (unit-tested in tests/)
+lib/plaidSync.ts           transactions/sync loop, upserts, runDetection
+lib/periods.ts, preset.ts, crypto.ts, plaid.ts, auth.ts, allowlist.ts, supabase/*
+supabase/migrations/0001_init.sql
+legacy/index.html          v1 app
 ```
 
-- `freq` ∈ `monthly | quarterly | semiannual | annual`.
-- `usage` is keyed by **period**: `2026-06` (monthly), `2026-Q2` (quarterly), `2026-H1` (semiannual), `2026` (annual). A benefit is "used" when the current period's key is `true`.
-- **Reset is emergent**: a new period's key has no entry, so the item shows unclaimed again. No scheduler.
-- **Fee recoup** = for each benefit, count `true` usage keys within the current calendar year × value, summed per card (a $25 monthly credit accrues $25 each month claimed).
-- localStorage keys: `cc-benefits-data-v1` (data), `cc-sync-cfg-v1` (sync config).
+## Data model (Postgres, all RLS `user_id = auth.uid()`)
+
+- `cards(id, name, color, annual_fee, plaid_account_id, sort)`
+- `benefits(id, card_id, name, value, freq, match_terms, sort)` — `freq ∈ monthly|quarterly|semiannual|annual`; `match_terms` = `|`-separated, case-insensitive phrases.
+- `claims(id, benefit_id, period, source manual|plaid, amount, dismissed)` — unique `(benefit_id, period)`. Period keys: `2026-06`, `2026-Q2`, `2026-H1`, `2026`. Benefit is "used" when the current period's claim exists and is not dismissed. **Reset is emergent** (no scheduler).
+- `plaid_items(item_id, access_token_enc, institution_name, cursor, status, last_synced_at)` — token AES-256-GCM encrypted with `PLAID_TOKEN_KEY`; token column not granted to `authenticated`.
+- `plaid_accounts(account_id, item_id, name, mask, type, subtype)` — read-only to users.
+- `transactions(transaction_id, account_id, date, amount, name, merchant_name, original_description, pending, benefit_id, ignored)` — users may update only `benefit_id`, `ignored`.
+
+## Auto-detection rules (`lib/detect.ts`)
+
+1. Candidate = posted, `amount < 0` (Plaid: negative = money in), not a payment ("payment/autopay/thank you"), on an account linked to a card.
+2. Match = benefit on that card whose phrase appears in name/merchant/original description; longest phrase wins.
+3. Claims reconciled per (benefit, period): sum of matched credits. **Manual and dismissed claims are never overwritten**; orphaned plaid claims are deleted.
+4. Tapping an auto tile sets `dismissed=true` (so re-sync doesn't resurrect it); tapping again restores.
+5. Unmatched credits on linked accounts show in **Credits to review**: assign (optionally remembering the description as a phrase) or ignore.
+6. **Fee recoup**: manual claim = benefit value; plaid claim = credited amount capped at value; calendar year.
+
+Preset phrases in `lib/preset.ts` are **unverified guesses** — tune them from real descriptors via the review list. In-app credits (Uber Cash, DoorDash, Lyft) and the Companion Certificate have no phrases (manual only).
 
 ## UI structure
 
-- **Hero**: "$ still available to use" (sum of unclaimed current-period credits) + progress bar of claimed vs. total this cycle.
-- **Annual fee recouped**: one bar per card, year-to-date claimed vs. fee; flips green "covered ✓" when exceeded.
-- **Grid (main view)**: matrix with **cards as columns**, **reset frequency as rows**. Benefit = tile tinted by card color; tap toggles claimed. Reset countdown lives on each row label and turns amber within 7 days.
-- **Filters**: Available / Claimed / All.
-- **Edit mode** (pencil): tapping a tile opens its editor; a dashed **+** per cell adds a benefit to that card+frequency.
-- **Cards sheet** (card icon): add/edit/delete cards (name, color, annual fee); reload presets.
-- **Sync sheet** (cloud icon): status dot + Supabase sync setup.
-
-## Cards & benefits (current ≈ mid-2026 — verify, they drift)
-
-- **Chase Sapphire Reserve** — $795 fee
-- **Amex Platinum** — $895 fee
-- **Delta SkyMiles Reserve (Amex)** — $650 fee
-
-22 benefits preloaded across the three at monthly/quarterly/semiannual/annual cadences. Deliberate special cases:
-- **`✦` = anniversary-based reset** (Sapphire travel credit; Delta Companion Certificate). App resets "annual" on Jan 1, so these two are flagged to track by renewal date.
-- **Companion Certificate value = $0** so its variable worth doesn't distort recoup math.
-- **Excluded on purpose**: Amex Saks (ended Jun 30, 2026), Amex Global Entry (every 4 yrs, doesn't fit a yearly cycle), Sapphire Apple TV+/Music (comp subscription, not use-it-or-lose-it).
-
-## Sync (optional, Supabase)
-
-Layered on localStorage; app works fully offline without it.
-
-- **Table:**
-  ```sql
-  create table if not exists benefits_state (
-    id text primary key,
-    data jsonb,
-    updated_at timestamptz default now()
-  );
-  alter table benefits_state enable row level security;
-  create policy "anon access" on benefits_state
-    for all to anon using (true) with check (true);
-  ```
-- **Mechanism**: whole `data` blob stored as one row via raw PostgREST `fetch` (no SDK). Row `id` = user-chosen **sync code** (also the access secret). Pull on load and on tab-focus; debounced push (800 ms) on change. Conflict resolution = **last-write-wins** by `data.updatedAt` (fine for one person, multiple devices).
-- **Config placement**: Supabase URL + anon key + sync code live only in each browser's localStorage, **never in the hosted file**. A **device-link bundle** (base64 of `{u,k,c}`, prefixed `CCB1:`) configures a second device in one paste.
-- **Security tradeoff**: RLS policy is open; the three values together grant access, and the sync code is the real gate. A Supabase **Auth (email magic-link)** variant — per-account privacy via `auth.uid()` RLS — was discussed but not built.
+Same visual language as v1 (CSS ported to `app/globals.css`: `--paper`, `--vault`, `bt-*` classes).
+- Header: bank icon (connections), Edit, Cards.
+- Banner: connect prompt → review-credits count → unlinked-cards prompt.
+- Hero ($ still available), Annual fee recouped bars, filters, cards × frequency grid. Auto-claimed tiles show **AUTO**.
+- Sheets: benefit editor (adds auto-detect phrases), cards list, card editor (adds Linked account), bank connections (connect/sync/disconnect, review list, sandbox fake-credit tool), import-from-v1.
 
 ## Build / run / validate / deploy
 
-- **Run**: open `index.html` in any browser (works from `file://` or any static host).
-- **Validate JS** (no build step): extract the inline script and syntax-check —
-  ```bash
-  node -e 'const fs=require("fs");fs.writeFileSync("/tmp/app.js",fs.readFileSync("index.html","utf8").match(/<script>([\s\S]*?)<\/script>/)[1])' && node --check /tmp/app.js
-  ```
-- **Deploy**: push to GitHub → **Settings → Pages → Deploy from a branch → `main` / root**. Or drag `index.html` to Netlify. Live URL (Pages): `https://<username>.github.io/<repo>/`.
-- Sync config is tied to the browser origin (URL), so keeping the same username+repo name preserves a device's saved config; a new URL/device just reconnects (Supabase data intact).
+```bash
+npm install
+cp .env.example .env.local   # fill in
+npm run dev
+npm test && npm run typecheck && npm run build
+```
+Deploy: Vercel with the same env vars; set `PLAID_WEBHOOK_URL=https://<app>/api/plaid/webhook`, Supabase redirect URLs, and (production) `PLAID_REDIRECT_URI=https://<app>/oauth`. Full steps in `README.md`.
 
 ## Conventions / working agreements
 
-- **One file.** No framework, no bundler, no npm runtime deps. Libraries only if inlined.
-- CSS lives in a single `<style>` block using CSS custom properties (`--paper`, `--vault`, etc.); icons are inline SVG strings.
-- All dynamic text passes through `esc()` before insertion; the UI re-renders by rebuilding `innerHTML` with event delegation (`data-act` / `data-field`).
-- To add a **benefit**: push `{id,cardId,name,value,freq,usage:{}}`; to add a **card**: `{id,name,color,annualFee}`. Preset data lives in `buildPreset()`.
-- Prefer rendered/visual verification for UI changes (open in browser); prefer surgical edits over whole-file rewrites.
-- Keep setup/docs simple and direct.
+- Detection logic stays pure in `lib/detect.ts` with tests in `tests/`; I/O lives in `lib/plaidSync.ts`.
+- Never log Plaid SDK errors whole (headers contain the secret) — use `plaidErrorCode()`.
+- Server routes call `requireUser()`; admin (service-role) queries always filter by `user_id`.
+- Prefer visual verification for UI changes; prefer surgical edits.
 
 ## Roadmap / open items
 
-- Optional **Supabase Auth (magic-link)** sync for proper per-account security.
-- Expiration **reminders/notifications** or a monthly review nudge (higher-leverage than auto-detection).
-- Per-benefit **notes**; true **anniversary-date** resets (vs. calendar-year) for `✦` items.
-- Keep benefit lists/fees current with issuer changes; add new cards as acquired.
+- Deploy + run against Plaid Sandbox end to end; then apply for Production.
+- Verify/tune real statement-credit descriptors for each benefit.
+- True **anniversary-date** resets for `✦` items; per-benefit notes.
+- Expiration reminders (email digest via Supabase cron or Vercel cron).
+- Optional: detect *qualifying purchases* (e.g. a Resy charge before the credit posts) as "pending" hints.
 
 ## Caveats
 
-- Benefit lists/fees reflect ~mid-2026 and will change; confirm with the issuer (several credits require activating the offer before posting).
-- The recoup gauge credits the full value of anything marked claimed — it mirrors the user's taps, not verified statement credits, and counts by calendar year while real fees hit on the renewal date. Motivational, not accounting.
-- **Auto-tracking of used credits was investigated and deprioritized**: true detection needs transaction data. CardPointers deliberately doesn't link accounts (its credit tracking is reminder+manual, like Clawback's); its **MCP API** (`mcp.cardpointers.com`) is the only programmatic hook but requires a backend/proxy + CardPointers+ and may not expose per-credit "used" state. Only account-linking apps (MaxRewards/Kudos) do real auto-detection. Not worth rebuilding in a single-file app.
+- Benefit lists/fees reflect ~mid-2026; confirm with issuers.
+- Plaid Production access, pricing, and Chase OAuth approval are outside the app's control.
+- Statement-credit descriptors vary; merchant refunds on a linked card can false-match a phrase (dismiss or ignore them).
+- Fee recoup counts by calendar year while real fees hit on the renewal date.
