@@ -4,15 +4,14 @@ import { claimWorth, isStatementCredit } from "@/lib/detect";
 import { FREQS, daysUntil, inYear, nextReset, periodKey, resetLabel } from "@/lib/periods";
 import { CARD_COLORS, PRESET } from "@/lib/preset";
 import { createClient } from "@/lib/supabase/client";
-import type { Benefit, Card, Claim, Freq, PlaidAccount, PlaidItem, Txn } from "@/lib/types";
-import ConnectBank from "./ConnectBank";
+import type { BankAccount, BankConnection, Benefit, Card, Claim, Freq, Txn } from "@/lib/types";
 import { Icon } from "./icons";
 
 type Filter = "available" | "used" | "all";
 type Modal =
   | { type: "benefit"; id: string | null; f: { name: string; value: string; freq: Freq; cardId: string; newCardName: string; match_terms: string } }
   | { type: "cards" }
-  | { type: "cardEdit"; id: string | null; f: { name: string; annual_fee: string; color: string; plaid_account_id: string } }
+  | { type: "cardEdit"; id: string | null; f: { name: string; annual_fee: string; color: string; account_id: string } }
   | { type: "bank" }
   | { type: "import"; bundle: string }
   | null;
@@ -22,16 +21,16 @@ const hexA = (hex: string, a: number) => {
   const h = hex.replace("#", "");
   return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
 };
-const acctLabel = (a: PlaidAccount) => `${a.name ?? "Account"}${a.mask ? ` ••${a.mask}` : ""}`;
+const acctLabel = (a: BankAccount) => [a.org, a.name ?? "Account"].filter(Boolean).join(" · ");
 
-export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv: "sandbox" | "production" }) {
+export default function Dashboard({ email }: { email: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [loaded, setLoaded] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [items, setItems] = useState<PlaidItem[]>([]);
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
+  const [connections, setConnections] = useState<BankConnection[]>([]);
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [credits, setCredits] = useState<Txn[]>([]);
   const [filter, setFilter] = useState<Filter>("available");
   const [editMode, setEditMode] = useState(false);
@@ -45,8 +44,8 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
       supabase.from("cards").select("*").order("sort").order("created_at"),
       supabase.from("benefits").select("*").order("sort").order("created_at"),
       supabase.from("claims").select("*"),
-      supabase.from("plaid_items").select("id, item_id, institution_name, status, last_synced_at"),
-      supabase.from("plaid_accounts").select("*"),
+      supabase.from("bank_connections").select("id, kind, label, status, last_synced_at"),
+      supabase.from("bank_accounts").select("*").order("created_at"),
       supabase.from("transactions").select("*").lt("amount", 0).gte("date", since).order("date", { ascending: false }).limit(300),
     ]);
     const firstErr = [c, b, cl, it, ac, tx].find((q) => q.error)?.error;
@@ -54,14 +53,19 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     setCards((c.data ?? []) as Card[]);
     setBenefits((b.data ?? []) as Benefit[]);
     setClaims((cl.data ?? []) as Claim[]);
-    setItems((it.data ?? []) as PlaidItem[]);
-    setAccounts((ac.data ?? []) as PlaidAccount[]);
+    setConnections((it.data ?? []) as BankConnection[]);
+    setAccounts((ac.data ?? []) as BankAccount[]);
     setCredits((tx.data ?? []) as Txn[]);
     setLoaded(true);
   }, [supabase]);
 
   useEffect(() => {
-    load();
+    // Load, then quietly pull new transactions if the last sync is older than 12h.
+    load().then(async () => {
+      const r = await fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auto: true }) }).catch(() => null);
+      const j = r?.ok ? await r.json().catch(() => null) : null;
+      if (j?.results?.some((x: { skipped?: boolean }) => !x.skipped)) load();
+    });
     const onVis = () => !document.hidden && load();
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -73,7 +77,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     const c = claimFor(b);
     return !!c && !c.dismissed;
   };
-  const cardOfAccount = (accountId: string) => cards.find((c) => c.plaid_account_id === accountId);
+  const cardOfAccount = (accountId: string) => cards.find((c) => c.account_id === accountId);
   const unmatched = credits.filter((t) => !t.benefit_id && !t.ignored && isStatementCredit(t) && cardOfAccount(t.account_id));
 
   /* ------------------------------------------------------------ mutations */
@@ -113,7 +117,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     } else if (c.dismissed) {
       setClaims((xs) => xs.map((x) => (x.id === c.id ? { ...x, dismissed: false } : x)));
       await run("", async () => check(await supabase.from("claims").update({ dismissed: false }).eq("id", c.id)));
-    } else if (c.source === "plaid") {
+    } else if (c.source === "auto") {
       // Keep the row so the next sync doesn't re-add it.
       setClaims((xs) => xs.map((x) => (x.id === c.id ? { ...x, dismissed: true } : x)));
       await run("", async () => check(await supabase.from("claims").update({ dismissed: true }).eq("id", c.id)));
@@ -123,7 +127,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     }
   }
 
-  async function insertCards(rows: Omit<Card, "id" | "plaid_account_id">[]) {
+  async function insertCards(rows: Omit<Card, "id" | "account_id">[]) {
     return check(await supabase.from("cards").insert(rows).select()) as Card[];
   }
 
@@ -192,7 +196,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
       if (modal.id) check(await supabase.from("benefits").update(row).eq("id", modal.id));
       else check(await supabase.from("benefits").insert(row));
       setModal(null);
-      if (row.match_terms && items.length) await api("/api/detect");
+      if (row.match_terms && accounts.length) await api("/api/detect");
       await load();
     });
   }
@@ -210,11 +214,11 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     const f = modal.f;
     if (!f.name.trim()) return;
     await run("Saving…", async () => {
-      const row = { name: f.name.trim(), color: f.color, annual_fee: Number(f.annual_fee) || 0, plaid_account_id: f.plaid_account_id || null };
+      const row = { name: f.name.trim(), color: f.color, annual_fee: Number(f.annual_fee) || 0, account_id: f.account_id || null };
       if (modal.id) check(await supabase.from("cards").update(row).eq("id", modal.id));
       else check(await supabase.from("cards").insert({ ...row, sort: cards.length }));
       setModal({ type: "cards" });
-      if (row.plaid_account_id) await api("/api/detect");
+      if (row.account_id) await api("/api/detect");
       await load();
     });
   }
@@ -229,17 +233,35 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
 
   async function syncNow() {
     await run("Syncing transactions…", async () => {
-      await api("/api/plaid/sync");
+      await api("/api/sync");
       await load();
     });
   }
 
-  async function disconnect(item: PlaidItem) {
-    if (!confirm(`Disconnect ${item.institution_name ?? "this bank"}? Its transactions are deleted; claims you ticked by hand stay.`)) return;
+  async function disconnect(c: BankConnection) {
+    if (!confirm("Remove the SimpleFIN connection? Its downloaded transactions are deleted here; ticks you made by hand stay. To fully revoke access, also delete the app connection on simplefin.org.")) return;
     await run("Disconnecting…", async () => {
-      await api(`/api/plaid/items/${encodeURIComponent(item.item_id)}`, { method: "DELETE" });
+      await api(`/api/connections/${encodeURIComponent(c.id)}`, { method: "DELETE" });
       await load();
     });
+  }
+
+  async function connectSimplefin(token: string) {
+    await run("Connecting to SimpleFIN and downloading this year’s transactions (can take a minute)…", async () => {
+      await api("/api/simplefin/connect", { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+      await load();
+      setModal({ type: "cards" });
+    });
+  }
+
+  async function uploadCsv(cardId: string, file: File) {
+    const j = await run("Importing CSV…", async () => {
+      const csv = await file.text();
+      const res = await api("/api/import-csv", { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card_id: cardId, csv }) });
+      await load();
+      return res as { imported: number; rows: number; matched: number };
+    });
+    if (j) alert(`Imported ${j.imported} of ${j.rows} transactions. ${j.matched} credit${j.matched === 1 ? "" : "s"} matched to benefits.`);
   }
 
   async function assign(t: Txn, benefitId: string, remember: boolean) {
@@ -265,16 +287,6 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     });
   }
 
-  async function simulateCredit(accountId: string, description: string, amount: number) {
-    await run("Creating sandbox credit…", async () => {
-      await api("/api/plaid/sandbox-credit", {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account_id: accountId, description, amount }),
-      });
-      await load();
-    });
-  }
-
   /* --------------------------------------------------------------- render */
   if (!loaded) return <div className="bt-wrap"><div className="bt-none">Loading…</div></div>;
 
@@ -290,7 +302,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
     setModal({
       type: "cardEdit",
       id: c?.id ?? null,
-      f: { name: c?.name ?? "", annual_fee: c ? String(c.annual_fee) : "", color: c?.color ?? CARD_COLORS[0], plaid_account_id: c?.plaid_account_id ?? "" },
+      f: { name: c?.name ?? "", annual_fee: c ? String(c.annual_fee) : "", color: c?.color ?? CARD_COLORS[0], account_id: c?.account_id ?? "" },
     });
 
   const status = (busy || err) && (
@@ -344,7 +356,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
         .filter((b) => b.freq === freq && b.card_id === cardId)
         .filter((b) => editMode || filter === "all" || (filter === "available" ? !isUsed(b) : isUsed(b)))
         .sort((a, b) => (isUsed(a) !== isUsed(b) ? (isUsed(a) ? 1 : -1) : (Number(b.value) || 0) - (Number(a.value) || 0)));
-    const linkedCount = cards.filter((c) => c.plaid_account_id).length;
+    const linkedCount = cards.filter((c) => c.account_id).length;
 
     page = (
       <div className="bt-wrap">
@@ -352,7 +364,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
           <div className="bt-eyebrow">Clawback</div>
           <div className="bt-head-actions">
             <button className="bt-iconbtn" onClick={() => setModal({ type: "bank" })} title="Bank connections">
-              <Icon name="bank" size={17} color={items.length ? "var(--vault)" : "var(--muted)"} />
+              <Icon name="bank" size={17} color={accounts.length ? "var(--vault)" : "var(--muted)"} />
             </button>
             <button className={`bt-mini ${editMode ? "on" : ""}`} onClick={() => setEditMode(!editMode)}>
               <Icon name="pencil" size={14} /> {editMode ? "Done" : "Edit"}
@@ -364,7 +376,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
         </header>
         {status}
 
-        {items.length === 0 ? (
+        {accounts.length === 0 ? (
           <div className="bt-banner">
             <span>Connect your card accounts to tick off credits automatically.</span>
             <button className="bt-fee-set" onClick={() => setModal({ type: "bank" })}>Connect</button>
@@ -468,7 +480,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
                     <div className="bt-cell" key={c.id}>
                       {band[ci].map((b) => {
                         const u = isUsed(b);
-                        const auto = u && claimFor(b)?.source === "plaid";
+                        const auto = u && claimFor(b)?.source === "auto";
                         return (
                           <button
                             key={b.id}
@@ -543,7 +555,7 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
               {!cards.length && <div className="bt-none">No cards yet.</div>}
               {cards.map((c) => {
                 const n = benefits.filter((b) => b.card_id === c.id).length;
-                const acct = accounts.find((a) => a.account_id === c.plaid_account_id);
+                const acct = accounts.find((a) => a.account_id === c.account_id);
                 return (
                   <div className="bt-card-row" key={c.id}>
                     <span className="bt-dot lg" style={{ background: c.color }} />
@@ -584,17 +596,17 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
                 <input className="bt-input bare" type="number" inputMode="decimal" placeholder="0" value={modal.f.annual_fee} onChange={(e) => setModal({ ...modal, f: { ...modal.f, annual_fee: e.target.value } })} />
               </div>
               <label className="bt-f-label">Linked account (for auto-detect)</label>
-              <select className="bt-input" value={modal.f.plaid_account_id} onChange={(e) => setModal({ ...modal, f: { ...modal.f, plaid_account_id: e.target.value } })}>
+              <select className="bt-input" value={modal.f.account_id} onChange={(e) => setModal({ ...modal, f: { ...modal.f, account_id: e.target.value } })}>
                 <option value="">Not linked</option>
                 {accounts
-                  .filter((a) => a.type === "credit" || a.account_id === modal.f.plaid_account_id)
+                  .filter((a) => !a.account_id.startsWith("csv:") || a.account_id === modal.f.account_id)
                   .map((a) => (
                     <option key={a.account_id} value={a.account_id}>
                       {acctLabel(a)}
                     </option>
                   ))}
               </select>
-              {!accounts.length && <p className="bt-help" style={{ marginTop: 8 }}>Connect a bank from the bank screen first.</p>}
+              {!accounts.length && <p className="bt-help" style={{ marginTop: 8 }}>Connect SimpleFIN from the bank screen first, or upload a CSV there (that links the card automatically).</p>}
               <label className="bt-f-label">Color</label>
               <div className="bt-swatches">
                 {CARD_COLORS.map((col) => (
@@ -608,23 +620,18 @@ export default function Dashboard({ email, plaidEnv }: { email: string; plaidEnv
           )}
           {modal.type === "bank" && (
             <BankSheet
-              items={items}
+              connections={connections}
               accounts={accounts}
               cards={cards}
               benefits={benefits}
               unmatched={unmatched}
-              plaidEnv={plaidEnv}
               busy={!!busy}
-              onLinked={() => {
-                setModal({ type: "cards" });
-                load();
-              }}
-              onError={setErr}
+              onConnect={connectSimplefin}
               onSync={syncNow}
               onDisconnect={disconnect}
+              onUpload={uploadCsv}
               onAssign={assign}
               onIgnore={ignore}
-              onSimulate={simulateCredit}
             />
           )}
           {modal.type === "import" && (
@@ -653,7 +660,7 @@ function modalTitle(m: NonNullable<Modal>) {
     case "cardEdit":
       return m.id ? "Edit card" : "New card";
     case "bank":
-      return "Bank connections";
+      return "Bank data";
     case "import":
       return "Import old data";
   }
@@ -738,59 +745,79 @@ function BenefitForm({
 }
 
 function BankSheet(props: {
-  items: PlaidItem[];
-  accounts: PlaidAccount[];
+  connections: BankConnection[];
+  accounts: BankAccount[];
   cards: Card[];
   benefits: Benefit[];
   unmatched: Txn[];
-  plaidEnv: "sandbox" | "production";
   busy: boolean;
-  onLinked: () => void;
-  onError: (m: string) => void;
+  onConnect: (token: string) => void;
   onSync: () => void;
-  onDisconnect: (i: PlaidItem) => void;
+  onDisconnect: (c: BankConnection) => void;
+  onUpload: (cardId: string, file: File) => void;
   onAssign: (t: Txn, benefitId: string, remember: boolean) => void;
   onIgnore: (t: Txn) => void;
-  onSimulate: (accountId: string, description: string, amount: number) => void;
 }) {
-  const { items, accounts, cards, benefits, unmatched, plaidEnv, busy } = props;
+  const { connections, accounts, cards, benefits, unmatched, busy } = props;
+  const [token, setToken] = useState("");
   const [pick, setPick] = useState<Record<string, string>>({});
   const [remember, setRemember] = useState(true);
-  const [sim, setSim] = useState({ account: "", description: "Platinum Digital Entertainment Credit", amount: "25" });
-  const linkedAccounts = accounts.filter((a) => cards.some((c) => c.plaid_account_id === a.account_id));
+  const [csvCard, setCsvCard] = useState(cards[0]?.id ?? "");
+  const [file, setFile] = useState<File | null>(null);
 
   return (
     <>
-      {plaidEnv === "sandbox" && (
-        <div className="bt-hint">
-          Sandbox mode: fake banks only. In Link, pick any bank and sign in as <b>user_transactions_dynamic</b> (any password) to test.
-        </div>
-      )}
-      {items.map((it) => (
-        <div className="bt-card-row" key={it.item_id}>
+      <div className="bt-section-title" style={{ marginTop: 0 }}>Automatic (SimpleFIN)</div>
+      {connections.map((c) => (
+        <div className="bt-card-row" key={c.id}>
           <Icon name="bank" size={18} />
           <div className="bt-card-info">
-            <div className="bt-card-name">{it.institution_name ?? "Bank"}</div>
+            <div className="bt-card-name">{c.label ?? "SimpleFIN Bridge"}</div>
             <div className="bt-card-count">
-              {accounts.filter((a) => a.item_id === it.item_id).map(acctLabel).join(", ") || "No accounts"}
+              {accounts.filter((a) => a.account_id.startsWith(`sf:${c.id}:`)).map(acctLabel).join(", ") || "No accounts yet"}
               {" · "}
-              {it.status === "ok" ? (it.last_synced_at ? `synced ${new Date(it.last_synced_at).toLocaleString()}` : "waiting for first sync") : <span style={{ color: "#B91C1C" }}>{it.status}</span>}
+              {c.status === "ok" ? (c.last_synced_at ? `synced ${new Date(c.last_synced_at).toLocaleString()}` : "not synced yet") : <span style={{ color: "#B91C1C" }}>{c.status}</span>}
             </div>
           </div>
-          <button className="bt-edit danger" onClick={() => props.onDisconnect(it)} aria-label="Disconnect">
+          <button className="bt-edit danger" onClick={() => props.onDisconnect(c)} aria-label="Remove connection">
             <Icon name="trash" size={15} />
           </button>
         </div>
       ))}
-      <ConnectBank onLinked={props.onLinked} onError={props.onError} />
-      {items.length > 0 && (
-        <button className="bt-secondary" onClick={props.onSync} disabled={busy}>
-          <Icon name="refresh" size={15} /> Sync now
-        </button>
+      {connections.length > 0 ? (
+        <>
+          <button className="bt-secondary" onClick={props.onSync} disabled={busy}>
+            <Icon name="refresh" size={15} /> Sync now
+          </button>
+          <p className="bt-help" style={{ marginTop: 12 }}>
+            Clawback checks for new transactions once a day and whenever you open it. Added a bank on simplefin.org? Tap Sync now, then link it under <b>Cards</b>.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="bt-help">
+            Paste the <b>setup token</b> from SimpleFIN Bridge (simplefin.org → your account → <b>New app connection</b>). It works once.
+          </p>
+          <textarea className="bt-input bt-codebox" placeholder="aHR0cHM6Ly9icmlkZ2Uuc2ltcGxlZmluLm9yZy9zaW1wbGVmaW4vY2xhaW0v…" value={token} onChange={(e) => setToken(e.target.value)} />
+          <button className="bt-primary" style={{ marginTop: 12 }} disabled={busy || !token.trim()} onClick={() => props.onConnect(token)}>
+            <Icon name="bank" size={16} /> Connect
+          </button>
+        </>
       )}
-      <p className="bt-help" style={{ marginTop: 12 }}>
-        After connecting, open <b>Cards</b> and link each card to its account. New statement credits are matched automatically when Plaid reports them.
-      </p>
+
+      <div className="bt-section-title">Manual (CSV upload)</div>
+      <p className="bt-help">Download transactions from Chase or Amex as a <b>CSV</b> file, then upload it here for that card. Re-uploading the same file is safe.</p>
+      <select className="bt-input" value={csvCard} onChange={(e) => setCsvCard(e.target.value)}>
+        {cards.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <input className="bt-input" style={{ marginTop: 8 }} type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <button className="bt-secondary" disabled={busy || !file || !csvCard} onClick={() => file && props.onUpload(csvCard, file)}>
+        Upload CSV
+      </button>
 
       {unmatched.length > 0 && (
         <>
@@ -800,7 +827,7 @@ function BankSheet(props: {
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Remember the description for next time
           </label>
           {unmatched.map((t) => {
-            const card = cards.find((c) => c.plaid_account_id === t.account_id);
+            const card = cards.find((c) => c.account_id === t.account_id);
             const options = benefits.filter((b) => b.card_id === card?.id);
             return (
               <div className="bt-txn" key={t.transaction_id}>
@@ -830,28 +857,6 @@ function BankSheet(props: {
               </div>
             );
           })}
-        </>
-      )}
-
-      {plaidEnv === "sandbox" && linkedAccounts.length > 0 && (
-        <>
-          <div className="bt-section-title">Test: fake a statement credit</div>
-          <select className="bt-input" value={sim.account} onChange={(e) => setSim({ ...sim, account: e.target.value })}>
-            <option value="">Choose a linked account&hellip;</option>
-            {linkedAccounts.map((a) => (
-              <option key={a.account_id} value={a.account_id}>
-                {acctLabel(a)}
-              </option>
-            ))}
-          </select>
-          <input className="bt-input" style={{ marginTop: 8 }} value={sim.description} onChange={(e) => setSim({ ...sim, description: e.target.value })} />
-          <div className="bt-money-input" style={{ marginTop: 8 }}>
-            <span>$</span>
-            <input className="bt-input bare" type="number" value={sim.amount} onChange={(e) => setSim({ ...sim, amount: e.target.value })} />
-          </div>
-          <button className="bt-secondary" disabled={!sim.account || busy} onClick={() => props.onSimulate(sim.account, sim.description, Number(sim.amount) || 0)}>
-            Post fake credit and sync
-          </button>
         </>
       )}
     </>

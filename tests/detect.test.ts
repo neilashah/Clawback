@@ -3,7 +3,7 @@ import { claimWorth, isStatementCredit, matchTransactions, reconcileClaims } fro
 import { periodKey } from "@/lib/periods";
 import type { Benefit, Card, Claim, Txn } from "@/lib/types";
 
-const card = (id: string, acct: string | null): Card => ({ id, name: id, color: "#000000", annual_fee: 0, plaid_account_id: acct, sort: 0 });
+const card = (id: string, acct: string | null): Card => ({ id, name: id, color: "#000000", annual_fee: 0, account_id: acct, sort: 0 });
 const ben = (id: string, card_id: string, match_terms: string, freq: Benefit["freq"] = "monthly", value = 25): Benefit => ({
   id, card_id, name: id, value, freq, match_terms, sort: 0,
 });
@@ -70,7 +70,7 @@ describe("matchTransactions", () => {
 });
 
 describe("reconcileClaims", () => {
-  const claim = (p: Partial<Claim>): Claim => ({ id: "c", benefit_id: "dig", period: "2026-06", source: "plaid", amount: 25, dismissed: false, ...p });
+  const claim = (p: Partial<Claim>): Claim => ({ id: "c", benefit_id: "dig", period: "2026-06", source: "auto", amount: 25, dismissed: false, ...p });
 
   it("inserts a claim per benefit+period, summing partial credits", () => {
     const ch = reconcileClaims(
@@ -110,11 +110,11 @@ describe("reconcileClaims", () => {
 
 describe("claimWorth", () => {
   const b = ben("dig", "plat", "", "monthly", 25);
-  it("counts manual claims at full value and plaid claims at the credited amount, capped", () => {
+  it("counts manual claims at full value and auto claims at the credited amount, capped", () => {
     expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "manual", amount: null, dismissed: false }, b)).toBe(25);
-    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "plaid", amount: 12.5, dismissed: false }, b)).toBe(12.5);
-    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "plaid", amount: 40, dismissed: false }, b)).toBe(25);
-    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "plaid", amount: 25, dismissed: true }, b)).toBe(0);
+    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 12.5, dismissed: false }, b)).toBe(12.5);
+    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 40, dismissed: false }, b)).toBe(25);
+    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 25, dismissed: true }, b)).toBe(0);
   });
 });
 

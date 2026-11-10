@@ -36,7 +36,7 @@ export function matchTransactions(
   cards: Card[],
 ): { transaction_id: string; benefit_id: string }[] {
   const cardByAccount = new Map<string, string>();
-  for (const c of cards) if (c.plaid_account_id) cardByAccount.set(c.plaid_account_id, c.id);
+  for (const c of cards) if (c.account_id) cardByAccount.set(c.account_id, c.id);
 
   const out: { transaction_id: string; benefit_id: string }[] = [];
   for (const t of txns) {
@@ -65,7 +65,7 @@ export interface ClaimChanges {
 /**
  * Bring auto-detected claims in line with assigned transactions.
  * - Manual and dismissed claims are never touched (the user's word wins).
- * - Plaid claims whose transactions disappeared are deleted.
+ * - Auto claims whose transactions disappeared are deleted.
  */
 export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Claim[]): ClaimChanges {
   const benefitById = new Map(benefits.map((b) => [b.id, b]));
@@ -87,10 +87,10 @@ export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Clai
   for (const [key, g] of totals) {
     const c = existingByKey.get(key);
     if (!c) changes.inserts.push(g);
-    else if (c.source === "plaid" && Number(c.amount) !== g.amount) changes.updates.push({ id: c.id, amount: g.amount });
+    else if (c.source === "auto" && Number(c.amount) !== g.amount) changes.updates.push({ id: c.id, amount: g.amount });
   }
   for (const c of existing) {
-    if (c.source === "plaid" && !c.dismissed && !totals.has(`${c.benefit_id}|${c.period}`)) changes.deletes.push(c.id);
+    if (c.source === "auto" && !c.dismissed && !totals.has(`${c.benefit_id}|${c.period}`)) changes.deletes.push(c.id);
   }
   return changes;
 }
@@ -99,7 +99,7 @@ export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Clai
 export function claimWorth(c: Claim, b: Benefit): number {
   if (c.dismissed) return 0;
   const v = Number(b.value) || 0;
-  if (c.source === "plaid" && c.amount != null) return v > 0 ? Math.min(Number(c.amount), v) : 0;
+  if (c.source === "auto" && c.amount != null) return v > 0 ? Math.min(Number(c.amount), v) : 0;
   return v;
 }
 

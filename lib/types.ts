@@ -5,7 +5,7 @@ export interface Card {
   name: string;
   color: string;
   annual_fee: number;
-  plaid_account_id: string | null;
+  account_id: string | null;
   sort: number;
 }
 
@@ -23,34 +23,31 @@ export interface Claim {
   id: string;
   benefit_id: string;
   period: string;
-  source: "manual" | "plaid";
+  source: "manual" | "auto";
   amount: number | null;
   dismissed: boolean;
 }
 
-export interface PlaidItem {
+export interface BankConnection {
   id: string;
-  item_id: string;
-  institution_name: string | null;
+  kind: "simplefin";
+  label: string | null;
   status: string;
   last_synced_at: string | null;
 }
 
-export interface PlaidAccount {
-  account_id: string;
-  item_id: string;
+export interface BankAccount {
+  account_id: string; // "sf:<connection>:<id>" or "csv:<card id>"
+  connection_id: string | null;
   name: string | null;
-  official_name: string | null;
-  mask: string | null;
-  type: string | null;
-  subtype: string | null;
+  org: string | null;
 }
 
 export interface Txn {
   transaction_id: string;
   account_id: string;
   date: string; // YYYY-MM-DD
-  amount: number; // Plaid sign convention: negative = credit / money in
+  amount: number; // negative = credit / money in, positive = charge
   name: string | null;
   merchant_name: string | null;
   original_description: string | null;
