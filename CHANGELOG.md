@@ -1,0 +1,14 @@
+# Changelog
+
+Append-only. Newest at the bottom.
+
+## 2026 (pre-Nov) — v1
+- Single-file `index.html`: benefit grid, annual-fee recoup bars, optional Supabase blob sync, PWA install. Now in `legacy/index.html`.
+
+## Nov 10, 2026, 8:47 AM ET — v2 rewrite
+- Rewrote as a Next.js 16 + TypeScript app hosted on Vercel.
+- Added Supabase magic-link login with per-user RLS tables (`cards`, `benefits`, `claims`) and an `ALLOWED_EMAILS` allowlist.
+- Added Plaid Transactions integration: Link, encrypted access tokens, `/transactions/sync` with cursor, verified webhooks, disconnect.
+- Added auto-detection of used credits from statement-credit descriptions (per-benefit phrases), a review list for unmatched credits, and dismissible auto claims.
+- Added import from v1 via device-link code, plus a sandbox tool to post fake statement credits.
+- Unit tests for detection (`npm test`).
