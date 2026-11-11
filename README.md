@@ -40,5 +40,3 @@ npm test && npm run typecheck && npm run build
 - First SimpleFIN sync requests transactions from Jan 1 in 60-day windows; later syncs overlap 14 days. Bridge allows roughly 24 requests a day, so app-open syncs are throttled to every 12h and **Sync now** to every 10 minutes.
 - CSV rows get stable IDs (re-uploading is safe), and rows already present from SimpleFIN (same amount within ±3 days) are skipped.
 
-## Security
-See [`SECURITY.md`](SECURITY.md).
