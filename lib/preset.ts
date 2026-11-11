@@ -16,6 +16,8 @@ export interface PresetBenefit {
 }
 export interface PresetCard {
   key: string;
+  /** Part of the "Load my 3 cards" starter set. Others are added from Cards → Add a known card. */
+  starter?: boolean;
   name: string;
   color: string;
   annual_fee: number;
@@ -25,6 +27,7 @@ export interface PresetCard {
 export const PRESET: PresetCard[] = [
   {
     key: "csr",
+    starter: true,
     name: "Sapphire Reserve",
     color: "#1D4ED8",
     annual_fee: 795,
@@ -41,6 +44,7 @@ export const PRESET: PresetCard[] = [
   },
   {
     key: "plat",
+    starter: true,
     name: "Amex Platinum",
     color: "#334155",
     annual_fee: 895,
@@ -60,6 +64,7 @@ export const PRESET: PresetCard[] = [
   },
   {
     key: "delta",
+    starter: true,
     name: "Delta Reserve",
     color: "#B91C1C",
     annual_fee: 650,
@@ -69,6 +74,21 @@ export const PRESET: PresetCard[] = [
       { name: "Companion Certificate ✦", value: 0, freq: "annual", terms: "" },
     ],
   },
+  {
+    // Verified Nov 2026: $650 fee; $25/mo dining credit; annual Free Night Award (up to 85k pts)
+    // after renewal. Left out on purpose: $100 Ritz/St. Regis property credit (per stay, not a
+    // cycle) and Global Entry/TSA PreCheck (every 4 yrs).
+    key: "brilliant",
+    name: "Marriott Brilliant",
+    color: "#BE185D",
+    annual_fee: 650,
+    benefits: [
+      { name: "Dining credit", value: 25, freq: "monthly", terms: "dining credit|brilliant dining" },
+      { name: "Free Night Award (85k) ✦", value: 0, freq: "annual", terms: "" },
+    ],
+  },
 ];
+
+export const STARTER = PRESET.filter((p) => p.starter);
 
 export const CARD_COLORS = ["#0F6E4E", "#1D4ED8", "#7C3AED", "#B91C1C", "#B45309", "#0E7490", "#BE185D", "#4D7C0F", "#334155"];

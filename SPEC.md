@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Nov 10, 2026, 3:51 PM ET)
+# Clawback — SPEC (as of Nov 11, 2026, 8:42 AM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -15,7 +15,8 @@
 - **Plaid was dropped** (Nov 10, 2026): Production approval required a business-grade security questionnaire. Replaced by SimpleFIN Bridge (consumer sign-up, ~$15/yr, Chase + Amex confirmed supported) plus CSV upload. The Plaid application was abandoned.
 - Pending: run migration `0002_simplefin_csv.sql`, add `CRON_SECRET` (and optionally `ENCRYPTION_KEY`) in Vercel, remove `PLAID_*` vars, sign up for SimpleFIN and paste a setup token, link cards.
 - Audience: owner + family (`ALLOWED_EMAILS`). Supabase's built-in email only reaches the Supabase account owner's address; family members need custom SMTP or invites.
-- `SECURITY.md` is the written security policy (a PDF version was generated for Plaid; now updated for SimpleFIN).
+- Dark mode with a system/light/dark toggle (`lib/theme.ts`, `components/ThemeToggle.tsx`).
+- `SECURITY.md` was removed from the repo after Plaid was dropped.
 
 ## Tech stack & files
 
@@ -40,7 +41,7 @@ lib/csv.ts                   Chase/Amex CSV parsing, stable IDs, dedupe (tests/c
 lib/bankSync.ts              syncConnection / syncUser / runDetection (I/O)
 lib/periods.ts, preset.ts, crypto.ts, auth.ts, allowlist.ts, supabase/*
 supabase/migrations/0001_init.sql, 0002_simplefin_csv.sql
-SECURITY.md, README.md, legacy/index.html
+README.md, legacy/index.html
 ```
 
 ## Data model (Postgres, all RLS `user_id = auth.uid()`)
@@ -61,7 +62,7 @@ SECURITY.md, README.md, legacy/index.html
 5. Unmatched credits → **Credits to review** (assign + optionally remember the description, or ignore).
 6. Fee recoup: manual claim = benefit value; auto claim = credited amount capped at value; calendar year.
 
-Preset phrases (`lib/preset.ts`) are **unverified guesses** — tune from real descriptors via the review list. Uber Cash, DoorDash, Lyft, and Companion Certificate are manual only.
+Presets (`lib/preset.ts`): the `starter` set (Sapphire Reserve, Amex Platinum, Delta Reserve) loads via "Load my 3 cards"; other presets (currently **Marriott Brilliant**: $650 fee, $25/mo dining credit, Free Night Award ✦; property credit and Global Entry excluded) are added from **Cards → Add a known card**. Preset phrases are **unverified guesses** — tune from real descriptors via the review list. Uber Cash, DoorDash, Lyft, and Companion Certificate are manual only.
 
 ## Sync behavior
 

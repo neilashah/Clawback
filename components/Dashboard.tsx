@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { claimWorth, isStatementCredit } from "@/lib/detect";
 import { FREQS, daysUntil, inYear, nextReset, periodKey, resetLabel } from "@/lib/periods";
-import { CARD_COLORS, PRESET } from "@/lib/preset";
+import { CARD_COLORS, PRESET, STARTER, type PresetCard } from "@/lib/preset";
 import { createClient } from "@/lib/supabase/client";
 import type { BankAccount, BankConnection, Benefit, Card, Claim, Freq, Txn } from "@/lib/types";
 import { Icon } from "./icons";
@@ -136,10 +136,19 @@ export default function Dashboard({ email }: { email: string }) {
 
   async function loadPreset() {
     await run("Loading cards…", async () => {
-      const made = await insertCards(PRESET.map((p, i) => ({ name: p.name, color: p.color, annual_fee: p.annual_fee, sort: i })));
-      const rows = PRESET.flatMap((p, i) =>
+      const made = await insertCards(STARTER.map((p, i) => ({ name: p.name, color: p.color, annual_fee: p.annual_fee, sort: i })));
+      const rows = STARTER.flatMap((p, i) =>
         p.benefits.map((b, j) => ({ card_id: made[i].id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j })),
       );
+      check(await supabase.from("benefits").insert(rows));
+      await load();
+    });
+  }
+
+  async function addPresetCard(p: PresetCard) {
+    await run(`Adding ${p.name}…`, async () => {
+      const [card] = await insertCards([{ name: p.name, color: p.color, annual_fee: p.annual_fee, sort: cards.length }]);
+      const rows = p.benefits.map((b, j) => ({ card_id: card.id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j }));
       check(await supabase.from("benefits").insert(rows));
       await load();
     });
@@ -583,6 +592,24 @@ export default function Dashboard({ email }: { email: string }) {
               <button className="bt-primary" onClick={() => openCard(null)}>
                 <Icon name="plus" size={16} /> Add card
               </button>
+              {cards.length > 0 &&
+                (() => {
+                  const have = new Set(cards.map((c) => c.name.trim().toLowerCase()));
+                  const missing = PRESET.filter((p) => !have.has(p.name.toLowerCase()));
+                  if (!missing.length) return null;
+                  return (
+                    <>
+                      <div className="bt-section-title">Add a known card</div>
+                      <p className="bt-help">Comes with its credits and auto-detect phrases filled in.</p>
+                      {missing.map((p) => (
+                        <button key={p.key} className="bt-secondary" onClick={() => addPresetCard(p)} disabled={!!busy}>
+                          <span className="bt-dot" style={{ background: p.color }} />
+                          {p.name} &middot; {money(p.annual_fee)}/yr &middot; {p.benefits.length} credit{p.benefits.length === 1 ? "" : "s"}
+                        </button>
+                      ))}
+                    </>
+                  );
+                })()}
               {!cards.length && (
                 <button className="bt-link" style={{ marginTop: 16 }} onClick={loadPreset}>
                   Load my 3 preset cards

@@ -28,3 +28,8 @@ Append-only. Newest at the bottom.
 - A small script in `<head>` applies a saved choice before first paint, so there is no light flash on load.
 - Replaced hard-coded whites and reds in `globals.css` with theme tokens; card colors used as text blend toward the ink color in dark mode so dark card colors (e.g. slate) stay readable.
 - Browser chrome color follows the system scheme (brand green in light, near-black in dark).
+
+## Nov 11, 2026, 8:42 AM ET — Marriott Brilliant + known-card picker
+- Added Marriott Bonvoy Brilliant preset: $650 fee, $25/mo dining credit (auto-detect), annual Free Night Award ✦ (manual, $0). Excluded the per-stay $100 property credit and Global Entry/TSA PreCheck.
+- Cards sheet: **Add a known card** lists presets not yet added; "Load my 3 cards" now loads only the starter set.
+- Grid fits 4+ cards on phones: column names wrap to two lines; AUTO label moved under the credit name.
