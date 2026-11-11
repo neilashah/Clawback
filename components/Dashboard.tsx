@@ -6,6 +6,7 @@ import { CARD_COLORS, PRESET } from "@/lib/preset";
 import { createClient } from "@/lib/supabase/client";
 import type { BankAccount, BankConnection, Benefit, Card, Claim, Freq, Txn } from "@/lib/types";
 import { Icon } from "./icons";
+import ThemeToggle from "./ThemeToggle";
 
 type Filter = "available" | "used" | "all";
 type Modal =
@@ -21,6 +22,8 @@ const hexA = (hex: string, a: number) => {
   const h = hex.replace("#", "");
   return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`;
 };
+/** Card color as text on the surface; blends toward --ink in dark mode so dark card colors stay readable. */
+const onSurface = (hex: string) => `color-mix(in srgb, ${hex} var(--accent-mix), var(--ink))`;
 const acctLabel = (a: BankAccount) => [a.org, a.name ?? "Account"].filter(Boolean).join(" · ");
 
 export default function Dashboard({ email }: { email: string }) {
@@ -363,6 +366,7 @@ export default function Dashboard({ email }: { email: string }) {
         <header className="bt-head">
           <div className="bt-eyebrow">Clawback</div>
           <div className="bt-head-actions">
+            <ThemeToggle />
             <button className="bt-iconbtn" onClick={() => setModal({ type: "bank" })} title="Bank connections">
               <Icon name="bank" size={17} color={accounts.length ? "var(--vault)" : "var(--muted)"} />
             </button>
@@ -489,7 +493,7 @@ export default function Dashboard({ email }: { email: string }) {
                             onClick={() => (editMode ? openBenefit(b) : toggle(b))}
                             title={auto ? "Detected from a statement credit. Tap to undo." : undefined}
                           >
-                            <span className="bt-tile-val" style={{ color: u ? "#fff" : c.color }}>{money(b.value)}</span>
+                            <span className="bt-tile-val" style={{ color: u ? "#fff" : onSurface(c.color) }}>{money(b.value)}</span>
                             <span className="bt-tile-name">{b.name}</span>
                             {u && !editMode && (
                               <span className="bt-tile-check">
@@ -499,7 +503,7 @@ export default function Dashboard({ email }: { email: string }) {
                             {auto && <span className="bt-tile-auto" style={{ color: "#fff" }}>auto</span>}
                             {editMode && (
                               <span className="bt-tile-edit">
-                                <Icon name="pencil" size={11} color={u ? "#fff" : c.color} />
+                                <Icon name="pencil" size={11} color={u ? "#fff" : onSurface(c.color)} />
                               </span>
                             )}
                           </button>
@@ -776,7 +780,7 @@ function BankSheet(props: {
             <div className="bt-card-count">
               {accounts.filter((a) => a.account_id.startsWith(`sf:${c.id}:`)).map(acctLabel).join(", ") || "No accounts yet"}
               {" · "}
-              {c.status === "ok" ? (c.last_synced_at ? `synced ${new Date(c.last_synced_at).toLocaleString()}` : "not synced yet") : <span style={{ color: "#B91C1C" }}>{c.status}</span>}
+              {c.status === "ok" ? (c.last_synced_at ? `synced ${new Date(c.last_synced_at).toLocaleString()}` : "not synced yet") : <span className="bt-err-text">{c.status}</span>}
             </div>
           </div>
           <button className="bt-edit danger" onClick={() => props.onDisconnect(c)} aria-label="Remove connection">
