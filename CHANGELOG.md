@@ -22,3 +22,9 @@ Append-only. Newest at the bottom.
 - Added CSV upload for Chase and Amex exports, with stable IDs and dedupe against SimpleFIN rows.
 - Migration `0002_simplefin_csv.sql`: drops Plaid tables; adds `bank_connections`, `bank_accounts`, `transactions`; renames `cards.plaid_account_id` → `account_id`; claim source `plaid` → `auto`.
 - Updated README, SECURITY.md, `.env.example` (`ENCRYPTION_KEY`, `CRON_SECRET`). Tests: 22 passing.
+
+## Nov 10, 2026, 9:14 PM ET — Dark mode
+- Added a dark theme. Follows the system setting by default; a header button cycles system → light → dark, and the choice is saved per device.
+- A small script in `<head>` applies a saved choice before first paint, so there is no light flash on load.
+- Replaced hard-coded whites and reds in `globals.css` with theme tokens; card colors used as text blend toward the ink color in dark mode so dark card colors (e.g. slate) stay readable.
+- Browser chrome color follows the system scheme (brand green in light, near-black in dark).
