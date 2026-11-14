@@ -48,3 +48,8 @@ Append-only. Newest at the bottom.
 
 ## Nov 14, 2026, 12:05 AM ET — Keep your own value on variable credits
 - Benefit update check no longer suggests resetting the value of variable-worth credits (Companion Certificate ✦, Free Night Award ✦) to the $0 placeholder. New `variable` flag on presets; other updates (renames, phrases, frequency) still apply. Tests: 33 passing.
+
+## Nov 14, 2026, 12:22 AM ET — Email reminders
+- Daily email (via Resend) when a credit with money left is about to reset: 5 days before for monthly credits, 14 days for the rest. One heads-up per credit per period, bundled into one email; ✦ and $0 credits skipped.
+- Footer switch to turn reminders on/off and a "Send a test reminder email" button.
+- Migration `0003_reminders.sql` (`user_settings`, `reminders_sent`); new env `RESEND_API_KEY`, optional `REMINDER_FROM`. Tests: 40 passing.

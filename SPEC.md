@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Nov 14, 2026, 12:05 AM ET)
+# Clawback — SPEC (as of Nov 14, 2026, 12:22 AM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -72,6 +72,14 @@ Presets (`lib/preset.ts`): the `starter` set (Sapphire Reserve, Amex Platinum, D
 
 - SimpleFIN first sync: from Jan 1 of the current year in 60-day windows; later syncs overlap 14 days. Pending transactions are skipped. Bridge allows ~24 requests/day and updates about daily.
 - CSV: Chase (`Transaction Date,Post Date,Description,Category,Type,Amount,Memo`; Payment rows dropped) and Amex (`Date,Description,Amount,...`). Stable SHA-1 IDs; rows matching a SimpleFIN transaction on the same account (same amount, ±3 days) are skipped. Uploading for an unlinked card creates and links a `csv:<card>` account.
+
+## Email reminders
+
+- Daily, inside `/api/cron/sync` (after the bank sync): `runReminders` (`lib/remindersJob.ts`) emails each user whose credits entered their window, via Resend (`lib/email.ts`, plain fetch; `RESEND_API_KEY`, optional `REMINDER_FROM`).
+- Rules (`lib/reminders.ts`, tested): remaining > 0, value > 0, no ✦ in the name, days until reset ≤ 5 (monthly) or ≤ 14 (others), and not already in `reminders_sent` for that benefit+period. One email per user per day; rows are recorded only after a successful send.
+- Tables (`0003_reminders.sql`): `user_settings(user_id, reminders default true)`, `reminders_sent(benefit_id, period unique)`.
+- UI: footer switch (Email reminders on/off) and **Send a test reminder email** (`/api/reminders/test`, not recorded).
+- Resend without a verified domain only delivers to the Resend account's own email.
 
 ## UI structure
 

@@ -40,3 +40,12 @@ npm test && npm run typecheck && npm run build
 - First SimpleFIN sync requests transactions from Jan 1 in 60-day windows; later syncs overlap 14 days. Bridge allows roughly 24 requests a day, so app-open syncs are throttled to every 12h and **Sync now** to every 10 minutes.
 - CSV rows get stable IDs (re-uploading is safe), and rows already present from SimpleFIN (same amount within ±3 days) are skipped.
 
+## Email reminders
+Once a day (after the bank sync) Clawback emails you when a credit with money left is about to reset: **5 days** before monthly credits reset, **14 days** before quarterly/semiannual/annual ones. One heads-up per credit per period; everything due that day comes in one email. ✦ credits (anniversary-based) and $0 placeholders are skipped.
+
+Setup:
+1. Run [`supabase/migrations/0003_reminders.sql`](supabase/migrations/0003_reminders.sql) in the Supabase SQL editor.
+2. Sign up at resend.com with the email you use for Clawback, create an API key, and add it in Vercel as `RESEND_API_KEY`. Redeploy.
+3. In the app, scroll to the bottom and tap **Send a test reminder email**. The switch there turns reminders on/off.
+
+Without a verified domain in Resend, emails only reach the address you signed up to Resend with. To email family members too, verify a domain in Resend and set `REMINDER_FROM` (e.g. `Clawback <reminders@yourdomain.com>`).

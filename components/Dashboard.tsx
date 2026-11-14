@@ -39,6 +39,8 @@ export default function Dashboard({ email }: { email: string }) {
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [credits, setCredits] = useState<Txn[]>([]);
+  /** Email reminders on/off; null until loaded (or if the settings table isn't set up yet). */
+  const [reminders, setReminders] = useState<boolean | null>(null);
   const [filter, setFilter] = useState<Filter>("available");
   const [editMode, setEditMode] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
@@ -78,6 +80,9 @@ export default function Dashboard({ email }: { email: string }) {
     setAccounts((ac.data ?? []) as BankAccount[]);
     setCredits((tx.data ?? []) as Txn[]);
     setLoaded(true);
+    // Separate so a missing settings table (migration 0003 not run yet) doesn't block the app.
+    const st = await supabase.from("user_settings").select("reminders").maybeSingle();
+    setReminders(st.error ? null : (st.data?.reminders ?? true));
   }, [supabase]);
 
   useEffect(() => {
@@ -255,6 +260,19 @@ export default function Dashboard({ email }: { email: string }) {
       check(await supabase.from("benefits").insert(rows));
       await load();
     });
+  }
+
+  async function toggleReminders() {
+    const next = !(reminders ?? true);
+    setReminders(next);
+    await run("", async () => {
+      check(await supabase.from("user_settings").upsert({ reminders: next, updated_at: new Date().toISOString() }));
+    });
+  }
+
+  async function sendTestEmail() {
+    const j = await run("Sending test email…", async () => (await api("/api/reminders/test")) as { to: string });
+    if (j) alert(`Test email sent to ${j.to}. Check your inbox (and spam) in a minute.`);
   }
 
   function checkUpdates() {
@@ -473,7 +491,7 @@ export default function Dashboard({ email }: { email: string }) {
             Start from scratch instead
           </button>
         </div>
-        <Footer email={email} />
+        <Footer email={email} reminders={reminders} busy={!!busy} onToggle={toggleReminders} onTest={sendTestEmail} />
       </div>
     );
   } else {
@@ -693,7 +711,7 @@ export default function Dashboard({ email }: { email: string }) {
             <Icon name="plus" size={18} /> Add benefit
           </button>
         )}
-        <Footer email={email} />
+        <Footer email={email} reminders={reminders} busy={!!busy} onToggle={toggleReminders} onTest={sendTestEmail} />
       </div>
     );
   }
@@ -1168,13 +1186,34 @@ function BankSheet(props: {
   );
 }
 
-function Footer({ email }: { email: string }) {
+function Footer(props: { email: string; reminders: boolean | null; busy: boolean; onToggle: () => void; onTest: () => void }) {
+  const on = props.reminders ?? true;
   return (
-    <div className="bt-foot">
-      <span className="bt-help" style={{ margin: 0 }}>{email}</span>
-      <form action="/auth/signout" method="post">
-        <button className="bt-link" style={{ margin: 0 }}>Sign out</button>
-      </form>
-    </div>
+    <>
+      <div className="bt-reminders">
+        <span className="bt-reminders-label">
+          Email reminders
+          <span className="bt-help" style={{ margin: 0 }}>
+            {props.reminders === null ? "Not set up yet" : on ? "5 days before monthly credits reset, 14 days for others" : "Off"}
+          </span>
+        </span>
+        {props.reminders !== null && (
+          <button className={`bt-switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label="Email reminders" onClick={props.onToggle} disabled={props.busy}>
+            <span />
+          </button>
+        )}
+      </div>
+      {props.reminders !== false && (
+        <button className="bt-link" style={{ marginTop: 6 }} onClick={props.onTest} disabled={props.busy}>
+          Send a test reminder email
+        </button>
+      )}
+      <div className="bt-foot">
+        <span className="bt-help" style={{ margin: 0 }}>{props.email}</span>
+        <form action="/auth/signout" method="post">
+          <button className="bt-link" style={{ margin: 0 }}>Sign out</button>
+        </form>
+      </div>
+    </>
   );
 }
