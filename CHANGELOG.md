@@ -40,3 +40,8 @@ Append-only. Newest at the bottom.
 - Totals and per-card "left" now use remaining dollars; fee recouped counts partial amounts (manual and auto).
 - Fix: auto-detected partial credits (e.g. $120 of a $300 hotel credit) no longer show as fully used.
 - New `lib/usage.ts` helpers with tests (27 passing). One-time tip explains the gesture.
+
+## Nov 13, 2026, 11:58 PM ET — Benefit audit + "Check for benefit updates"
+- Presets verified Nov 14, 2026: Sapphire Reserve DoorDash $25 → $35/mo; Amex Platinum CLEAR $209 → $219; Hotel credit renamed **Lodging credit (FHR / THC / Airbnb Luxe)** with new phrases; added Delta Reserve **Delta Stays credit** ($200/yr); Select hotel credit (2026) marked to end Dec 31, 2026.
+- New Cards → **Check for benefit updates**: compares your cards with the latest presets and lets you tick which changes to apply (fees, values, renames, phrases, new and ended credits). Custom cards/credits are left alone.
+- `lib/presetSync.ts` + tests (31 passing).
