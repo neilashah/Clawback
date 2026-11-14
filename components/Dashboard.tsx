@@ -1,9 +1,10 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { claimWorth, isStatementCredit } from "@/lib/detect";
 import { FREQS, daysUntil, inYear, nextReset, periodKey, resetLabel } from "@/lib/periods";
 import { CARD_COLORS, PRESET, STARTER, type PresetCard } from "@/lib/preset";
 import { createClient } from "@/lib/supabase/client";
+import { isFullyUsed, isPartlyUsed, remaining as remainingOf, usedAmount } from "@/lib/usage";
 import type { BankAccount, BankConnection, Benefit, Card, Claim, Freq, Txn } from "@/lib/types";
 import { Icon } from "./icons";
 import ThemeToggle from "./ThemeToggle";
@@ -15,6 +16,7 @@ type Modal =
   | { type: "cardEdit"; id: string | null; f: { name: string; annual_fee: string; color: string; account_id: string } }
   | { type: "bank" }
   | { type: "import"; bundle: string }
+  | { type: "use"; benefitId: string; name: string; add: string }
   | null;
 
 const money = (n: number) => "$" + (Number(n) || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -40,6 +42,20 @@ export default function Dashboard({ email }: { email: string }) {
   const [modal, setModal] = useState<Modal>(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [showHoldTip, setShowHoldTip] = useState(false);
+  useEffect(() => {
+    try {
+      setShowHoldTip(localStorage.getItem("clawback-hold-tip") !== "dismissed");
+    } catch {
+      setShowHoldTip(true);
+    }
+  }, []);
+  const dismissHoldTip = () => {
+    setShowHoldTip(false);
+    try {
+      localStorage.setItem("clawback-hold-tip", "dismissed");
+    } catch {}
+  };
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
@@ -76,10 +92,10 @@ export default function Dashboard({ email }: { email: string }) {
 
   /* --------------------------------------------------------------- derived */
   const claimFor = (b: Benefit) => claims.find((c) => c.benefit_id === b.id && c.period === periodKey(b.freq));
-  const isUsed = (b: Benefit) => {
-    const c = claimFor(b);
-    return !!c && !c.dismissed;
-  };
+  /** Fully used this period (partial uses stay "available"). */
+  const isUsed = (b: Benefit) => isFullyUsed(claimFor(b), b);
+  const isPartial = (b: Benefit) => isPartlyUsed(claimFor(b), b);
+  const leftOf = (b: Benefit) => remainingOf(claimFor(b), b);
   const cardOfAccount = (accountId: string) => cards.find((c) => c.account_id === accountId);
   const unmatched = credits.filter((t) => !t.benefit_id && !t.ignored && isStatementCredit(t) && cardOfAccount(t.account_id));
 
@@ -129,6 +145,91 @@ export default function Dashboard({ email }: { email: string }) {
       await run("", async () => check(await supabase.from("claims").delete().eq("id", c.id)));
     }
   }
+
+  /** Replace the local copy of a claim with the saved row. */
+  const putClaim = (row: Claim) => setClaims((xs) => [...xs.filter((x) => x.id !== row.id && !(x.benefit_id === row.benefit_id && x.period === row.period)), row]);
+
+  async function addUse(b: Benefit, add: number) {
+    if (!(add > 0)) return;
+    const period = periodKey(b.freq);
+    const c = claimFor(b);
+    await run("Saving…", async () => {
+      const total = Math.round((usedAmount(c, b) + add) * 100) / 100;
+      const row = c
+        ? check(await supabase.from("claims").update({ amount: total, source: "manual", dismissed: false }).eq("id", c.id).select().single())
+        : check(await supabase.from("claims").insert({ benefit_id: b.id, period, source: "manual", amount: total }).select().single());
+      putClaim(row as Claim);
+      setModal(null);
+    });
+  }
+
+  async function markFull(b: Benefit) {
+    const period = periodKey(b.freq);
+    const c = claimFor(b);
+    await run("Saving…", async () => {
+      const row = c
+        ? check(await supabase.from("claims").update({ amount: null, source: "manual", dismissed: false }).eq("id", c.id).select().single())
+        : check(await supabase.from("claims").insert({ benefit_id: b.id, period, source: "manual" }).select().single());
+      putClaim(row as Claim);
+      setModal(null);
+    });
+  }
+
+  async function clearUse(b: Benefit) {
+    const c = claimFor(b);
+    if (!c) return setModal(null);
+    await run("Saving…", async () => {
+      if (c.source === "auto") {
+        const row = check(await supabase.from("claims").update({ dismissed: true }).eq("id", c.id).select().single());
+        putClaim(row as Claim);
+      } else {
+        check(await supabase.from("claims").delete().eq("id", c.id));
+        setClaims((xs) => xs.filter((x) => x.id !== c.id));
+      }
+      setModal(null);
+    });
+  }
+
+  const openUse = (b: Benefit) => setModal({ type: "use", benefitId: b.id, name: b.name, add: "" });
+
+  // Press-and-hold detection for tiles.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const holdProps = (b: Benefit) => {
+    if (editMode || !(Number(b.value) > 0)) return {};
+    const cancel = () => {
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    };
+    return {
+      onPointerDown: () => {
+        held.current = false;
+        cancel();
+        holdTimer.current = setTimeout(() => {
+          held.current = true;
+          openUse(b);
+        }, 500);
+      },
+      onPointerUp: cancel,
+      onPointerLeave: cancel,
+      onPointerCancel: cancel,
+      onContextMenu: (e: React.MouseEvent) => {
+        e.preventDefault();
+        cancel();
+        held.current = true;
+        openUse(b);
+      },
+    };
+  };
+  const tapTile = (b: Benefit) => {
+    if (held.current) {
+      held.current = false;
+      return;
+    }
+    if (editMode) return openBenefit(b);
+    if (isPartial(b)) return openUse(b);
+    toggle(b);
+  };
 
   async function insertCards(rows: Omit<Card, "id" | "account_id">[]) {
     return check(await supabase.from("cards").insert(rows).select()) as Card[];
@@ -354,8 +455,9 @@ export default function Dashboard({ email }: { email: string }) {
     for (const b of benefits) {
       const v = Number(b.value) || 0;
       total += v;
-      if (isUsed(b)) used += v;
-      else remaining[b.card_id] = (remaining[b.card_id] ?? 0) + v;
+      used += usedAmount(claimFor(b), b);
+      const left = leftOf(b);
+      if (left > 0) remaining[b.card_id] = (remaining[b.card_id] ?? 0) + left;
     }
     for (const c of claims) {
       const b = benefits.find((x) => x.id === c.benefit_id);
@@ -367,7 +469,7 @@ export default function Dashboard({ email }: { email: string }) {
       benefits
         .filter((b) => b.freq === freq && b.card_id === cardId)
         .filter((b) => editMode || filter === "all" || (filter === "available" ? !isUsed(b) : isUsed(b)))
-        .sort((a, b) => (isUsed(a) !== isUsed(b) ? (isUsed(a) ? 1 : -1) : (Number(b.value) || 0) - (Number(a.value) || 0)));
+        .sort((a, b) => (isUsed(a) !== isUsed(b) ? (isUsed(a) ? 1 : -1) : leftOf(b) - leftOf(a) || (Number(b.value) || 0) - (Number(a.value) || 0)));
     const linkedCount = cards.filter((c) => c.account_id).length;
 
     page = (
@@ -466,6 +568,14 @@ export default function Dashboard({ email }: { email: string }) {
           ))}
         </div>
 
+        {!editMode && showHoldTip && (
+          <div className="bt-hint bt-hint-row">
+            <span>Tip: press and hold a credit to record a partial use, like $120 of a $300 hotel credit.</span>
+            <button className="bt-hint-x" onClick={dismissHoldTip} aria-label="Dismiss tip">
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+        )}
         {editMode && <div className="bt-hint">Edit mode: tap a benefit to change it or set its auto-detect phrases, or tap + to add one.</div>}
 
         <div className="bt-matrix">
@@ -493,23 +603,38 @@ export default function Dashboard({ email }: { email: string }) {
                     <div className="bt-cell" key={c.id}>
                       {band[ci].map((b) => {
                         const u = isUsed(b);
-                        const auto = u && claimFor(b)?.source === "auto";
+                        const part = isPartial(b);
+                        const cl = claimFor(b);
+                        const auto = (u || part) && cl?.source === "auto";
+                        const spent = usedAmount(cl, b);
                         return (
                           <button
                             key={b.id}
                             className={`bt-tile ${u ? "used" : ""}`}
                             style={u ? { background: c.color, borderColor: c.color } : { background: hexA(c.color, 0.09), borderColor: hexA(c.color, 0.22) }}
-                            onClick={() => (editMode ? openBenefit(b) : toggle(b))}
-                            title={auto ? "Detected from a statement credit. Tap to undo." : undefined}
+                            onClick={() => tapTile(b)}
+                            {...holdProps(b)}
+                            title={
+                              part
+                                ? `${money(spent)} of ${money(b.value)} used`
+                                : auto
+                                  ? "Detected from a statement credit. Tap to undo."
+                                  : undefined
+                            }
                           >
-                            <span className="bt-tile-val" style={{ color: u ? "#fff" : onSurface(c.color) }}>{money(b.value)}</span>
+                            <span className="bt-tile-val" style={{ color: u ? "#fff" : onSurface(c.color) }}>{money(part ? leftOf(b) : b.value)}</span>
                             <span className="bt-tile-name">{b.name}</span>
+                            {part && (
+                              <span className="bt-tile-progress" aria-label={`${money(spent)} of ${money(b.value)} used`}>
+                                <span style={{ width: `${Math.round((spent / (Number(b.value) || 1)) * 100)}%`, background: onSurface(c.color) }} />
+                              </span>
+                            )}
                             {u && !editMode && (
                               <span className="bt-tile-check">
                                 <Icon name="check" size={11} color="#fff" />
                               </span>
                             )}
-                            {auto && <span className="bt-tile-auto" style={{ color: "#fff" }}>auto</span>}
+                            {auto && <span className="bt-tile-auto" style={{ color: u ? "#fff" : onSurface(c.color) }}>auto</span>}
                             {editMode && (
                               <span className="bt-tile-edit">
                                 <Icon name="pencil" size={11} color={u ? "#fff" : onSurface(c.color)} />
@@ -665,6 +790,55 @@ export default function Dashboard({ email }: { email: string }) {
               onIgnore={ignore}
             />
           )}
+          {modal.type === "use" &&
+            (() => {
+              const b = benefits.find((x) => x.id === modal.benefitId);
+              if (!b) return null;
+              const card = cards.find((x) => x.id === b.card_id);
+              const spent = usedAmount(claimFor(b), b);
+              const v = Number(b.value) || 0;
+              const add = Number(modal.add);
+              return (
+                <>
+                  <div className="bt-use-summary">
+                    Used so far: <b>{money(spent)}</b> of {money(v)} &middot; {money(v - spent)} left
+                  </div>
+                  <div className="bt-bar" style={{ margin: "10px 0 4px" }}>
+                    <div className="bt-bar-fill" style={{ width: `${v ? Math.round((spent / v) * 100) : 0}%`, background: card ? onSurface(card.color) : undefined }} />
+                  </div>
+                  <label className="bt-f-label">Add a use</label>
+                  <div className="bt-money-input">
+                    <span>$</span>
+                    <input
+                      className="bt-input bare"
+                      type="number"
+                      inputMode="decimal"
+                      placeholder={String(Math.max(0, v - spent))}
+                      value={modal.add}
+                      autoFocus
+                      onChange={(e) => setModal({ ...modal, add: e.target.value })}
+                      onKeyDown={(e) => e.key === "Enter" && add > 0 && addUse(b, add)}
+                    />
+                  </div>
+                  <button className="bt-primary" onClick={() => addUse(b, add)} disabled={!!busy || !(add > 0)}>
+                    Add {add > 0 ? money(add) : ""}
+                  </button>
+                  {spent < v && (
+                    <button className="bt-secondary" onClick={() => markFull(b)} disabled={!!busy}>
+                      <Icon name="check" size={15} /> Mark fully used
+                    </button>
+                  )}
+                  {spent > 0 && (
+                    <button className="bt-danger" onClick={() => clearUse(b)} disabled={!!busy}>
+                      <Icon name="trash" size={15} /> Clear this period
+                    </button>
+                  )}
+                  <p className="bt-help" style={{ marginTop: 12 }}>
+                    Uses add up within this period and count toward your annual fee recouped. The credit stays under Available until it&rsquo;s fully used.
+                  </p>
+                </>
+              );
+            })()}
           {modal.type === "import" && (
             <>
               <p className="bt-help">
@@ -694,6 +868,8 @@ function modalTitle(m: NonNullable<Modal>) {
       return "Bank data";
     case "import":
       return "Import old data";
+    case "use":
+      return m.name;
   }
 }
 

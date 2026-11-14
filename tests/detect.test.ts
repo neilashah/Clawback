@@ -115,6 +115,7 @@ describe("claimWorth", () => {
     expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 12.5, dismissed: false }, b)).toBe(12.5);
     expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 40, dismissed: false }, b)).toBe(25);
     expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "auto", amount: 25, dismissed: true }, b)).toBe(0);
+    expect(claimWorth({ id: "1", benefit_id: "dig", period: "x", source: "manual", amount: 10, dismissed: false }, b)).toBe(10);
   });
 });
 

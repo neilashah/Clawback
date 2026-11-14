@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Nov 11, 2026, 8:42 AM ET)
+# Clawback — SPEC (as of Nov 13, 2026, 11:50 PM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -49,6 +49,7 @@ README.md, legacy/index.html
 - `cards(id, name, color, annual_fee, account_id, sort)`
 - `benefits(id, card_id, name, value, freq, match_terms, sort)` — `freq ∈ monthly|quarterly|semiannual|annual`; `match_terms` = `|`-separated, case-insensitive phrases.
 - `claims(id, benefit_id, period, source manual|auto, amount, dismissed)` — unique `(benefit_id, period)`. Period keys: `2026-06`, `2026-Q2`, `2026-H1`, `2026`. **Reset is emergent.**
+  - **`amount` semantics** (`lib/usage.ts`): `null` = fully used; a number = dollars used so far (partial use or auto-detected credit), capped at value. A benefit is *fully used* when used ≥ value (value-0 benefits: claim exists). Partly used credits stay under **Available** showing what's left; hero/column totals use remaining dollars; fee recoup counts used dollars.
 - `bank_connections(id, kind 'simplefin', access_url_enc, label, status, last_synced_at)` — access URL AES-256-GCM encrypted (`ENCRYPTION_KEY`, falls back to `PLAID_TOKEN_KEY`); column not granted to `authenticated`.
 - `bank_accounts(account_id, connection_id, name, org)` — ids `sf:<connection>:<simplefin id>` or `csv:<card id>`.
 - `transactions(transaction_id, account_id, date, amount, name, merchant_name, original_description, pending, benefit_id, ignored)` — **amount sign: negative = money in (credits)**. SimpleFIN amounts are negated on import; Chase CSV negated; Amex CSV kept. Users may update only `benefit_id`, `ignored`.
@@ -59,6 +60,7 @@ README.md, legacy/index.html
 2. Match = benefit on that card whose phrase appears in the description; longest phrase wins.
 3. Claims reconciled per (benefit, period) as the sum of matched credits. **Manual and dismissed claims are never overwritten**; orphaned auto claims are deleted.
 4. Tapping an AUTO tile sets `dismissed=true`; tapping again restores.
+4a. **Partial use:** press-and-hold a tile (or right-click) opens a "record a use" sheet: add an amount (uses add up within the period), mark fully used, or clear. Tapping a partly used tile opens the same sheet. Recording a use converts an auto claim to manual so the user's number wins over later syncs.
 5. Unmatched credits → **Credits to review** (assign + optionally remember the description, or ignore).
 6. Fee recoup: manual claim = benefit value; auto claim = credited amount capped at value; calendar year.
 
