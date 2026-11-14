@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { claimWorth, isStatementCredit } from "@/lib/detect";
 import { FREQS, daysUntil, inYear, nextReset, periodKey, resetLabel } from "@/lib/periods";
-import { CARD_COLORS, PRESET, STARTER, type PresetCard } from "@/lib/preset";
+import { CARD_COLORS, PRESET, STARTER, activeBenefits, todayIso, type PresetCard } from "@/lib/preset";
+import { diffPresets, type PresetChange } from "@/lib/presetSync";
 import { createClient } from "@/lib/supabase/client";
 import { isFullyUsed, isPartlyUsed, remaining as remainingOf, usedAmount } from "@/lib/usage";
 import type { BankAccount, BankConnection, Benefit, Card, Claim, Freq, Txn } from "@/lib/types";
@@ -17,6 +18,7 @@ type Modal =
   | { type: "bank" }
   | { type: "import"; bundle: string }
   | { type: "use"; benefitId: string; name: string; add: string }
+  | { type: "updates"; changes: PresetChange[]; picked: Record<string, boolean> }
   | null;
 
 const money = (n: number) => "$" + (Number(n) || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -239,7 +241,7 @@ export default function Dashboard({ email }: { email: string }) {
     await run("Loading cards…", async () => {
       const made = await insertCards(STARTER.map((p, i) => ({ name: p.name, color: p.color, annual_fee: p.annual_fee, sort: i })));
       const rows = STARTER.flatMap((p, i) =>
-        p.benefits.map((b, j) => ({ card_id: made[i].id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j })),
+        activeBenefits(p).map((b, j) => ({ card_id: made[i].id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j })),
       );
       check(await supabase.from("benefits").insert(rows));
       await load();
@@ -249,8 +251,36 @@ export default function Dashboard({ email }: { email: string }) {
   async function addPresetCard(p: PresetCard) {
     await run(`Adding ${p.name}…`, async () => {
       const [card] = await insertCards([{ name: p.name, color: p.color, annual_fee: p.annual_fee, sort: cards.length }]);
-      const rows = p.benefits.map((b, j) => ({ card_id: card.id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j }));
+      const rows = activeBenefits(p).map((b, j) => ({ card_id: card.id, name: b.name, value: b.value, freq: b.freq, match_terms: b.terms, sort: j }));
       check(await supabase.from("benefits").insert(rows));
+      await load();
+    });
+  }
+
+  function checkUpdates() {
+    const changes = diffPresets(cards, benefits, PRESET, todayIso());
+    setModal({ type: "updates", changes, picked: Object.fromEntries(changes.map((c) => [c.key, true])) });
+  }
+
+  async function applyUpdates(changes: PresetChange[]) {
+    await run("Updating benefits…", async () => {
+      let termsChanged = false;
+      for (const c of changes) {
+        if (c.kind === "fee") {
+          check(await supabase.from("cards").update({ annual_fee: c.to }).eq("id", c.cardId));
+        } else if (c.kind === "add") {
+          const sort = Math.max(-1, ...benefits.filter((b) => b.card_id === c.cardId).map((b) => b.sort ?? 0)) + 1;
+          check(await supabase.from("benefits").insert({ card_id: c.cardId, name: c.benefit.name, value: c.benefit.value, freq: c.benefit.freq, match_terms: c.benefit.terms, sort }));
+          termsChanged ||= !!c.benefit.terms;
+        } else if (c.kind === "update") {
+          check(await supabase.from("benefits").update(c.patch).eq("id", c.benefitId));
+          termsChanged ||= c.patch.match_terms != null;
+        } else if (c.kind === "remove") {
+          check(await supabase.from("benefits").delete().eq("id", c.benefitId));
+        }
+      }
+      setModal({ type: "cards" });
+      if (termsChanged && accounts.length) await api("/api/detect");
       await load();
     });
   }
@@ -717,6 +747,11 @@ export default function Dashboard({ email }: { email: string }) {
               <button className="bt-primary" onClick={() => openCard(null)}>
                 <Icon name="plus" size={16} /> Add card
               </button>
+              {cards.length > 0 && (
+                <button className="bt-secondary" onClick={checkUpdates} disabled={!!busy}>
+                  <Icon name="refresh" size={15} /> Check for benefit updates
+                </button>
+              )}
               {cards.length > 0 &&
                 (() => {
                   const have = new Set(cards.map((c) => c.name.trim().toLowerCase()));
@@ -729,7 +764,7 @@ export default function Dashboard({ email }: { email: string }) {
                       {missing.map((p) => (
                         <button key={p.key} className="bt-secondary" onClick={() => addPresetCard(p)} disabled={!!busy}>
                           <span className="bt-dot" style={{ background: p.color }} />
-                          {p.name} &middot; {money(p.annual_fee)}/yr &middot; {p.benefits.length} credit{p.benefits.length === 1 ? "" : "s"}
+                          {p.name} &middot; {money(p.annual_fee)}/yr &middot; {activeBenefits(p).length} credit{activeBenefits(p).length === 1 ? "" : "s"}
                         </button>
                       ))}
                     </>
@@ -839,6 +874,67 @@ export default function Dashboard({ email }: { email: string }) {
                 </>
               );
             })()}
+          {modal.type === "updates" &&
+            (() => {
+              const { changes, picked } = modal;
+              if (!changes.length) {
+                return (
+                  <>
+                    <div className="bt-none">
+                      <Icon name="check" size={22} />
+                      <div style={{ marginTop: 8 }}>Everything matches the latest known benefits.</div>
+                    </div>
+                    <p className="bt-help">Cards and credits you added yourself aren&rsquo;t checked.</p>
+                  </>
+                );
+              }
+              const chosen = changes.filter((c) => picked[c.key]);
+              const label = (c: PresetChange) =>
+                c.kind === "fee"
+                  ? "Annual fee"
+                  : c.kind === "add"
+                    ? `New: ${c.benefit.name}`
+                    : c.kind === "remove"
+                      ? `Remove: ${c.name}`
+                      : c.patch.name ?? c.name;
+              const detail = (c: PresetChange) =>
+                c.kind === "fee"
+                  ? [`${money(c.from)} → ${money(c.to)}`]
+                  : c.kind === "add"
+                    ? [`${money(c.benefit.value)}, resets ${c.benefit.freq}${c.benefit.terms ? ", auto-detected" : ""}`]
+                    : c.kind === "remove"
+                      ? [`Ended ${c.until}. Removing it also deletes its claim history.`]
+                      : c.notes;
+              const groups = [...new Set(changes.map((c) => c.cardName))];
+              return (
+                <>
+                  <p className="bt-help">Pick the updates to apply. Anything you leave unticked stays as it is (it&rsquo;ll be suggested again next time).</p>
+                  {groups.map((g) => (
+                    <div key={g}>
+                      <div className="bt-section-title">{g}</div>
+                      {changes
+                        .filter((c) => c.cardName === g)
+                        .map((c) => (
+                          <label key={c.key} className="bt-update">
+                            <input type="checkbox" checked={!!picked[c.key]} onChange={(e) => setModal({ ...modal, picked: { ...picked, [c.key]: e.target.checked } })} />
+                            <span>
+                              <span className={`bt-update-title ${c.kind === "remove" ? "danger" : ""}`}>{label(c)}</span>
+                              {detail(c).map((d) => (
+                                <span key={d} className="bt-update-note">
+                                  {d}
+                                </span>
+                              ))}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  ))}
+                  <button className="bt-primary" onClick={() => applyUpdates(chosen)} disabled={!!busy || !chosen.length}>
+                    Apply {chosen.length} update{chosen.length === 1 ? "" : "s"}
+                  </button>
+                </>
+              );
+            })()}
           {modal.type === "import" && (
             <>
               <p className="bt-help">
@@ -870,6 +966,8 @@ function modalTitle(m: NonNullable<Modal>) {
       return "Import old data";
     case "use":
       return m.name;
+    case "updates":
+      return "Benefit updates";
   }
 }
 

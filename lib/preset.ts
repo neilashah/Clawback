@@ -1,7 +1,9 @@
 import type { Freq } from "./types";
 
 /**
- * Starter cards and credits (≈ mid-2026; verify with the issuer, they drift).
+ * Known cards and credits. Last verified against issuer/press sources: Nov 14, 2026.
+ * Issuers change these often. When you edit this list, users can pull the changes
+ * into their own cards from Cards → "Check for benefit updates" (lib/presetSync.ts).
  *
  * `terms` are guesses at words that appear in each statement credit's description.
  * They are unverified until real transactions arrive. Credits applied inside a
@@ -13,6 +15,10 @@ export interface PresetBenefit {
   value: number;
   freq: Freq;
   terms: string;
+  /** Earlier names this credit had, so renames are recognized on existing cards. */
+  aliases?: string[];
+  /** Last day (YYYY-MM-DD) the credit exists; after it, the update check suggests removing it. */
+  until?: string;
 }
 export interface PresetCard {
   key: string;
@@ -34,10 +40,11 @@ export const PRESET: PresetCard[] = [
     benefits: [
       { name: "Travel credit ✦", value: 300, freq: "annual", terms: "travel credit" },
       { name: "The Edit hotel credit", value: 500, freq: "annual", terms: "the edit|edit credit" },
-      { name: "Select hotel credit (2026)", value: 250, freq: "annual", terms: "select hotel" },
+      { name: "Select hotel credit (2026)", value: 250, freq: "annual", terms: "select hotel", until: "2026-12-31" },
       { name: "Dining credit (Exclusive Tables)", value: 150, freq: "semiannual", terms: "dining credit|exclusive tables" },
       { name: "StubHub / viagogo credit", value: 150, freq: "semiannual", terms: "stubhub|viagogo" },
-      { name: "DoorDash credit", value: 25, freq: "monthly", terms: "" },
+      // $15 restaurant + two $10 non-restaurant promos since Oct 1, 2026 (was $5 + $10 + $10).
+      { name: "DoorDash credit", value: 35, freq: "monthly", terms: "" },
       { name: "Lyft credit", value: 10, freq: "monthly", terms: "" },
       { name: "Peloton credit", value: 10, freq: "monthly", terms: "peloton" },
     ],
@@ -50,13 +57,20 @@ export const PRESET: PresetCard[] = [
     annual_fee: 895,
     benefits: [
       { name: "Resy dining credit", value: 100, freq: "quarterly", terms: "resy" },
-      { name: "Hotel credit (FHR / THC)", value: 300, freq: "semiannual", terms: "hotel credit|fine hotels|hotel collection" },
+      // Renamed "Lodging Credit" Oct 22, 2026; now also prepaid Airbnb Luxe (2+ nights) via Amex Travel.
+      {
+        name: "Lodging credit (FHR / THC / Airbnb Luxe)",
+        value: 300,
+        freq: "semiannual",
+        terms: "lodging credit|hotel credit|fine hotels|hotel collection|airbnb luxe",
+        aliases: ["Hotel credit (FHR / THC)"],
+      },
       { name: "lululemon credit", value: 75, freq: "quarterly", terms: "lululemon" },
       { name: "Digital entertainment credit", value: 25, freq: "monthly", terms: "digital entertainment" },
       { name: "Uber Cash", value: 15, freq: "monthly", terms: "" },
       { name: "Walmart+ credit", value: 13, freq: "monthly", terms: "walmart" },
       { name: "Airline fee credit", value: 200, freq: "annual", terms: "airline fee|airline incidental" },
-      { name: "CLEAR Plus credit", value: 209, freq: "annual", terms: "clear plus|clearme|clear secure" },
+      { name: "CLEAR Plus credit", value: 219, freq: "annual", terms: "clear plus|clearme|clear secure" },
       { name: "Equinox credit", value: 300, freq: "annual", terms: "equinox" },
       { name: "Uber One credit", value: 120, freq: "annual", terms: "uber one" },
       { name: "Oura Ring credit", value: 200, freq: "annual", terms: "oura" },
@@ -71,6 +85,7 @@ export const PRESET: PresetCard[] = [
     benefits: [
       { name: "Resy credit", value: 20, freq: "monthly", terms: "resy" },
       { name: "Rideshare credit", value: 10, freq: "monthly", terms: "rideshare" },
+      { name: "Delta Stays credit", value: 200, freq: "annual", terms: "delta stays" },
       { name: "Companion Certificate ✦", value: 0, freq: "annual", terms: "" },
     ],
   },
@@ -90,5 +105,15 @@ export const PRESET: PresetCard[] = [
 ];
 
 export const STARTER = PRESET.filter((p) => p.starter);
+
+/** Local calendar date as YYYY-MM-DD. */
+export function todayIso(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** A preset card's credits that still exist on `today`. */
+export function activeBenefits(p: PresetCard, today: string = todayIso()): PresetBenefit[] {
+  return p.benefits.filter((b) => !b.until || b.until >= today);
+}
 
 export const CARD_COLORS = ["#0F6E4E", "#1D4ED8", "#7C3AED", "#B91C1C", "#B45309", "#0E7490", "#BE185D", "#4D7C0F", "#334155"];
