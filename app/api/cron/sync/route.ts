@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { syncConnection } from "@/lib/bankSync";
+import { runReminders } from "@/lib/remindersJob";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const maxDuration = 60;
 
-/** Daily Vercel Cron job (see vercel.json). Vercel sends Authorization: Bearer $CRON_SECRET. */
+/**
+ * Daily Vercel Cron job (see vercel.json). Vercel sends Authorization: Bearer $CRON_SECRET.
+ * 1) pull new transactions, 2) email reminders (after sync, so fresh credits count).
+ */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -21,5 +25,11 @@ export async function GET(req: Request) {
       results.push({ id: c.id, error: (e as Error).message });
     }
   }
-  return NextResponse.json({ ok: true, results });
+  let reminders: unknown;
+  try {
+    reminders = await runReminders(admin, new URL(req.url).origin);
+  } catch (e) {
+    reminders = { error: (e as Error).message };
+  }
+  return NextResponse.json({ ok: true, results, reminders });
 }
