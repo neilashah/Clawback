@@ -33,3 +33,10 @@ Append-only. Newest at the bottom.
 - Added Marriott Bonvoy Brilliant preset: $650 fee, $25/mo dining credit (auto-detect), annual Free Night Award ✦ (manual, $0). Excluded the per-stay $100 property credit and Global Entry/TSA PreCheck.
 - Cards sheet: **Add a known card** lists presets not yet added; "Load my 3 cards" now loads only the starter set.
 - Grid fits 4+ cards on phones: column names wrap to two lines; AUTO label moved under the credit name.
+
+## Nov 13, 2026, 11:50 PM ET — Partial use of credits
+- Press-and-hold a credit (or right-click) to record a partial use; uses add up within the period. Sheet also offers "Mark fully used" and "Clear".
+- Partly used credits stay under Available showing the remaining amount with a progress bar; they move to Claimed only when fully used.
+- Totals and per-card "left" now use remaining dollars; fee recouped counts partial amounts (manual and auto).
+- Fix: auto-detected partial credits (e.g. $120 of a $300 hotel credit) no longer show as fully used.
+- New `lib/usage.ts` helpers with tests (27 passing). One-time tip explains the gesture.

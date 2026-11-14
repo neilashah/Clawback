@@ -5,6 +5,7 @@
  * database and applies the returned changes.
  */
 import { parseDay, periodKey } from "./periods";
+import { usedAmount } from "./usage";
 import type { Benefit, Card, Claim, Txn } from "./types";
 
 export function terms(matchTerms: string): string[] {
@@ -95,12 +96,9 @@ export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Clai
   return changes;
 }
 
-/** Dollars a claim counts toward the annual-fee recoup. */
+/** Dollars a claim counts toward the annual-fee recoup (partial uses count what was used). */
 export function claimWorth(c: Claim, b: Benefit): number {
-  if (c.dismissed) return 0;
-  const v = Number(b.value) || 0;
-  if (c.source === "auto" && c.amount != null) return v > 0 ? Math.min(Number(c.amount), v) : 0;
-  return v;
+  return usedAmount(c, b);
 }
 
 function round2(n: number) {

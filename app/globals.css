@@ -190,3 +190,11 @@ button:disabled{opacity:.55;cursor:default;}
 .bt-foot{display:flex;justify-content:center;gap:16px;margin-top:22px;}
 .bt-foot form{margin:0;}
 .bt-err-text{color:var(--danger);}
+
+/* ---- partial use ---- */
+.bt-tile{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation;}
+.bt-tile-progress{display:block;height:4px;border-radius:99px;background:color-mix(in srgb, var(--ink) 14%, transparent);overflow:hidden;margin-top:5px;}
+.bt-tile-progress>span{display:block;height:100%;border-radius:99px;}
+.bt-hint-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.bt-hint-x{flex:none;border:none;background:none;color:inherit;cursor:pointer;padding:2px;opacity:.8;}
+.bt-use-summary{font-size:15px;font-variant-numeric:tabular-nums;}
