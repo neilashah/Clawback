@@ -45,3 +45,6 @@ Append-only. Newest at the bottom.
 - Presets verified Nov 14, 2026: Sapphire Reserve DoorDash $25 → $35/mo; Amex Platinum CLEAR $209 → $219; Hotel credit renamed **Lodging credit (FHR / THC / Airbnb Luxe)** with new phrases; added Delta Reserve **Delta Stays credit** ($200/yr); Select hotel credit (2026) marked to end Dec 31, 2026.
 - New Cards → **Check for benefit updates**: compares your cards with the latest presets and lets you tick which changes to apply (fees, values, renames, phrases, new and ended credits). Custom cards/credits are left alone.
 - `lib/presetSync.ts` + tests (31 passing).
+
+## Nov 14, 2026, 12:05 AM ET — Keep your own value on variable credits
+- Benefit update check no longer suggests resetting the value of variable-worth credits (Companion Certificate ✦, Free Night Award ✦) to the $0 placeholder. New `variable` flag on presets; other updates (renames, phrases, frequency) still apply. Tests: 33 passing.
