@@ -19,6 +19,8 @@ export interface PresetBenefit {
   aliases?: string[];
   /** Last day (YYYY-MM-DD) the credit exists; after it, the update check suggests removing it. */
   until?: string;
+  /** Worth varies per person. The preset value is a placeholder and the user's value is never overwritten. */
+  variable?: true;
 }
 export interface PresetCard {
   key: string;
@@ -86,7 +88,7 @@ export const PRESET: PresetCard[] = [
       { name: "Resy credit", value: 20, freq: "monthly", terms: "resy" },
       { name: "Rideshare credit", value: 10, freq: "monthly", terms: "rideshare" },
       { name: "Delta Stays credit", value: 200, freq: "annual", terms: "delta stays" },
-      { name: "Companion Certificate ✦", value: 0, freq: "annual", terms: "" },
+      { name: "Companion Certificate ✦", value: 0, freq: "annual", terms: "", variable: true },
     ],
   },
   {
@@ -99,7 +101,7 @@ export const PRESET: PresetCard[] = [
     annual_fee: 650,
     benefits: [
       { name: "Dining credit", value: 25, freq: "monthly", terms: "dining credit|brilliant dining" },
-      { name: "Free Night Award (85k) ✦", value: 0, freq: "annual", terms: "" },
+      { name: "Free Night Award (85k) ✦", value: 0, freq: "annual", terms: "", variable: true },
     ],
   },
 ];

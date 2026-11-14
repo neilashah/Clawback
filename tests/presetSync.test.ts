@@ -68,6 +68,24 @@ describe("diffPresets", () => {
   });
 });
 
+describe("variable-value credits", () => {
+  const vp: PresetCard[] = [
+    { key: "d", name: "Delta Reserve", color: "#000000", annual_fee: 650, benefits: [{ name: "Companion Certificate", value: 0, freq: "annual", terms: "", variable: true }] },
+  ];
+  const c = [card("d", "Delta Reserve", 650)];
+
+  it("never suggests overwriting the user's own value", () => {
+    expect(diffPresets(c, [ben("cc", "d", "Companion Certificate", 678.04, "annual")], vp, "2026-11-14")).toEqual([]);
+  });
+
+  it("still suggests other differences", () => {
+    const ch = diffPresets(c, [ben("cc", "d", "Companion Certificate", 678.04, "monthly")], vp, "2026-11-14");
+    expect(ch).toHaveLength(1);
+    expect(ch[0]).toMatchObject({ kind: "update", patch: { freq: "annual" } });
+    expect("patch" in ch[0] && "value" in ch[0].patch).toBe(false);
+  });
+});
+
 describe("activeBenefits", () => {
   it("drops credits after their until date", () => {
     expect(activeBenefits(preset[0], "2026-12-31").map((b) => b.name)).toContain("Old credit");

@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Nov 13, 2026, 11:58 PM ET)
+# Clawback — SPEC (as of Nov 14, 2026, 12:05 AM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -66,7 +66,7 @@ README.md, legacy/index.html
 
 Presets (`lib/preset.ts`): the `starter` set (Sapphire Reserve, Amex Platinum, Delta Reserve) loads via "Load my 3 cards"; other presets (currently **Marriott Brilliant**: $650 fee, $25/mo dining credit, Free Night Award ✦; property credit and Global Entry excluded) are added from **Cards → Add a known card**. Preset phrases are **unverified guesses** — tune from real descriptors via the review list. Uber Cash, DoorDash, Lyft, and Companion Certificate are manual only.
 
-**Benefit updates** (`lib/presetSync.ts`): Cards → *Check for benefit updates* diffs the user's cards (matched to presets by name) against the catalog and lists suggested changes with checkboxes: annual fee, value/frequency, renames (via preset `aliases`), merged auto-detect phrases (user phrases kept), new credits, and removal of credits past their `until` date. Custom cards/credits are never touched. When an issuer changes a benefit: edit `lib/preset.ts` (add an alias on renames, `until` on endings), and the user applies it in-app. Presets last verified **Nov 14, 2026** (CSR DoorDash $35/mo; Plat CLEAR $219, Hotel → Lodging credit incl. Airbnb Luxe; Delta Stays $200 added; CSR Select hotel credit ends 2026-12-31).
+**Benefit updates** (`lib/presetSync.ts`): Cards → *Check for benefit updates* diffs the user's cards (matched to presets by name) against the catalog and lists suggested changes with checkboxes: annual fee, value/frequency, renames (via preset `aliases`), merged auto-detect phrases (user phrases kept), new credits, and removal of credits past their `until` date. Custom cards/credits are never touched. Presets marked `variable` (Companion Certificate ✦, Free Night Award ✦) never get value suggestions: their $0 is a placeholder and the user's own value wins. When an issuer changes a benefit: edit `lib/preset.ts` (add an alias on renames, `until` on endings), and the user applies it in-app. Presets last verified **Nov 14, 2026** (CSR DoorDash $35/mo; Plat CLEAR $219, Hotel → Lodging credit incl. Airbnb Luxe; Delta Stays $200 added; CSR Select hotel credit ends 2026-12-31).
 
 ## Sync behavior
 

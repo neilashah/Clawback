@@ -5,7 +5,8 @@
  * Rules
  * - Cards match presets by name (case-insensitive). Unmatched (custom) cards are ignored.
  * - Benefits match by current preset name or any alias. Custom benefits are never touched.
- * - Value, frequency and name differences are suggested as updates. Missing auto-detect
+ * - Value, frequency and name differences are suggested as updates, except the value of
+ *   `variable` credits (e.g. Companion Certificate), where the user's value always wins. Missing auto-detect
  *   phrases are added; the user's own phrases are always kept.
  * - Preset benefits missing from the card are suggested as additions.
  * - Benefits past their `until` date are suggested for removal.
@@ -69,7 +70,7 @@ export function diffPresets(cards: Card[], benefits: Benefit[], preset: PresetCa
         patch.name = pb.name;
         notes.push(`Renamed from “${found.name}”`);
       }
-      if (Number(found.value) !== pb.value) {
+      if (!pb.variable && Number(found.value) !== pb.value) {
         patch.value = pb.value;
         notes.push(`Value ${usd(Number(found.value))} → ${usd(pb.value)}`);
       }
