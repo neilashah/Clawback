@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { claimWorth, isStatementCredit } from "@/lib/detect";
-import { FREQS, daysUntil, inYear, nextReset, periodKey, resetLabel } from "@/lib/periods";
+import { FREQS, benefitNextReset, benefitPeriod, countsTowardFee, daysUntil, fmtDate, isAnniversary, nextRenewal, nextReset, resetLabel } from "@/lib/periods";
 import { CARD_COLORS, PRESET, STARTER, activeBenefits, todayIso, type PresetCard } from "@/lib/preset";
 import { diffPresets, type PresetChange } from "@/lib/presetSync";
 import { createClient } from "@/lib/supabase/client";
@@ -14,7 +14,7 @@ type Filter = "available" | "used" | "all";
 type Modal =
   | { type: "benefit"; id: string | null; f: { name: string; value: string; freq: Freq; cardId: string; newCardName: string; match_terms: string } }
   | { type: "cards" }
-  | { type: "cardEdit"; id: string | null; f: { name: string; annual_fee: string; color: string; account_id: string } }
+  | { type: "cardEdit"; id: string | null; f: { name: string; annual_fee: string; color: string; account_id: string; renews_on: string } }
   | { type: "bank" }
   | { type: "import"; bundle: string }
   | { type: "use"; benefitId: string; name: string; add: string }
@@ -98,7 +98,10 @@ export default function Dashboard({ email }: { email: string }) {
   }, [load]);
 
   /* --------------------------------------------------------------- derived */
-  const claimFor = (b: Benefit) => claims.find((c) => c.benefit_id === b.id && c.period === periodKey(b.freq));
+  const cardOf = (b: Benefit) => cards.find((c) => c.id === b.card_id);
+  /** This period's key; ✦ credits follow the card anniversary when it's set. */
+  const periodFor = (b: Benefit) => benefitPeriod(b, cardOf(b));
+  const claimFor = (b: Benefit) => claims.find((c) => c.benefit_id === b.id && c.period === periodFor(b));
   /** Fully used this period (partial uses stay "available"). */
   const isUsed = (b: Benefit) => isFullyUsed(claimFor(b), b);
   const isPartial = (b: Benefit) => isPartlyUsed(claimFor(b), b);
@@ -130,7 +133,7 @@ export default function Dashboard({ email }: { email: string }) {
   };
 
   async function toggle(b: Benefit) {
-    const period = periodKey(b.freq);
+    const period = periodFor(b);
     const c = claimFor(b);
     // Optimistic update first, then persist.
     if (!c) {
@@ -158,7 +161,7 @@ export default function Dashboard({ email }: { email: string }) {
 
   async function addUse(b: Benefit, add: number) {
     if (!(add > 0)) return;
-    const period = periodKey(b.freq);
+    const period = periodFor(b);
     const c = claimFor(b);
     await run("Saving…", async () => {
       const total = Math.round((usedAmount(c, b) + add) * 100) / 100;
@@ -171,7 +174,7 @@ export default function Dashboard({ email }: { email: string }) {
   }
 
   async function markFull(b: Benefit) {
-    const period = periodKey(b.freq);
+    const period = periodFor(b);
     const c = claimFor(b);
     await run("Saving…", async () => {
       const row = c
@@ -375,7 +378,10 @@ export default function Dashboard({ email }: { email: string }) {
     const f = modal.f;
     if (!f.name.trim()) return;
     await run("Saving…", async () => {
-      const row = { name: f.name.trim(), color: f.color, annual_fee: Number(f.annual_fee) || 0, account_id: f.account_id || null };
+      const prev = modal.id ? cards.find((c) => c.id === modal.id) : undefined;
+      const row: Record<string, unknown> = { name: f.name.trim(), color: f.color, annual_fee: Number(f.annual_fee) || 0, account_id: f.account_id || null };
+      // Only send renews_on when it's set or was set (works before migration 0004 too).
+      if (f.renews_on || prev?.renews_on) row.renews_on = f.renews_on || null;
       if (modal.id) check(await supabase.from("cards").update(row).eq("id", modal.id));
       else check(await supabase.from("cards").insert({ ...row, sort: cards.length }));
       setModal({ type: "cards" });
@@ -463,7 +469,7 @@ export default function Dashboard({ email }: { email: string }) {
     setModal({
       type: "cardEdit",
       id: c?.id ?? null,
-      f: { name: c?.name ?? "", annual_fee: c ? String(c.annual_fee) : "", color: c?.color ?? CARD_COLORS[0], account_id: c?.account_id ?? "" },
+      f: { name: c?.name ?? "", annual_fee: c ? String(c.annual_fee) : "", color: c?.color ?? CARD_COLORS[0], account_id: c?.account_id ?? "", renews_on: c?.renews_on ?? "" },
     });
 
   const status = (busy || err) && (
@@ -499,7 +505,6 @@ export default function Dashboard({ email }: { email: string }) {
     let used = 0;
     const remaining: Record<string, number> = {};
     const recouped: Record<string, number> = {};
-    const year = new Date().getFullYear();
     for (const b of benefits) {
       const v = Number(b.value) || 0;
       total += v;
@@ -509,7 +514,7 @@ export default function Dashboard({ email }: { email: string }) {
     }
     for (const c of claims) {
       const b = benefits.find((x) => x.id === c.benefit_id);
-      if (b && inYear(c.period, year)) recouped[b.card_id] = (recouped[b.card_id] ?? 0) + claimWorth(c, b);
+      if (b && countsTowardFee(c.period, b, cardOf(b))) recouped[b.card_id] = (recouped[b.card_id] ?? 0) + claimWorth(c, b);
     }
     const pct = total > 0 ? Math.round((used / total) * 100) : 0;
     const cols = `repeat(${cards.length},1fr)`;
@@ -570,7 +575,7 @@ export default function Dashboard({ email }: { email: string }) {
         </section>
 
         <section className="bt-fees">
-          <div className="bt-fees-title">Annual fee recouped this year</div>
+          <div className="bt-fees-title">Annual fee recouped this {cards.some((c) => c.renews_on) ? "card year" : "year"}</div>
           {cards.map((c) => {
             const fee = Number(c.annual_fee) || 0;
             const got = recouped[c.id] ?? 0;
@@ -585,6 +590,7 @@ export default function Dashboard({ email }: { email: string }) {
                   </span>
                   {fee > 0 ? (
                     <span className="bt-fee-num">
+                      {c.renews_on && <span className="bt-fee-pct">renews {fmtDate(nextRenewal(c.renews_on)).replace(/, \d{4}$/, "")} &middot; </span>}
                       {money(got)} / {money(fee)}
                       {covered ? <span className="bt-fee-covered"> &middot; covered &#10003;</span> : <span className="bt-fee-pct"> &middot; {p}%</span>}
                     </span>
@@ -672,6 +678,11 @@ export default function Dashboard({ email }: { email: string }) {
                           >
                             <span className="bt-tile-val" style={{ color: u ? "#fff" : onSurface(c.color) }}>{money(part ? leftOf(b) : b.value)}</span>
                             <span className="bt-tile-name">{b.name}</span>
+                            {isAnniversary(b, c) && !editMode && (
+                              <span className="bt-tile-reset" style={{ color: u ? "#fff" : undefined }}>
+                                Resets {fmtDate(benefitNextReset(b, c)).replace(/, \d{4}$/, "")}
+                              </span>
+                            )}
                             {part && (
                               <span className="bt-tile-progress" aria-label={`${money(spent)} of ${money(b.value)} used`}>
                                 <span style={{ width: `${Math.round((spent / (Number(b.value) || 1)) * 100)}%`, background: onSurface(c.color) }} />
@@ -750,6 +761,7 @@ export default function Dashboard({ email }: { email: string }) {
                       <div className="bt-card-count">
                         {n} benefit{n === 1 ? "" : "s"}
                         {c.annual_fee ? ` · ${money(c.annual_fee)}/yr` : ""}
+                        {c.renews_on ? ` · renews ${fmtDate(nextRenewal(c.renews_on))}` : ""}
                         {acct ? ` · linked to ${acctLabel(acct)}` : " · not linked"}
                       </div>
                     </div>
@@ -804,6 +816,9 @@ export default function Dashboard({ email }: { email: string }) {
                 <span>$</span>
                 <input className="bt-input bare" type="number" inputMode="decimal" placeholder="0" value={modal.f.annual_fee} onChange={(e) => setModal({ ...modal, f: { ...modal.f, annual_fee: e.target.value } })} />
               </div>
+              <label className="bt-f-label">Renewal date</label>
+              <input className="bt-input" type="date" value={modal.f.renews_on} onChange={(e) => setModal({ ...modal, f: { ...modal.f, renews_on: e.target.value } })} />
+              <p className="bt-help" style={{ marginTop: 6 }}>From your card&rsquo;s renewal notice. ✦ credits reset on this date each year, the fee recoup counts from it, and you&rsquo;ll get an email 60 and 30 days before.</p>
               <label className="bt-f-label">Linked account (for auto-detect)</label>
               <select className="bt-input" value={modal.f.account_id} onChange={(e) => setModal({ ...modal, f: { ...modal.f, account_id: e.target.value } })}>
                 <option value="">Not linked</option>

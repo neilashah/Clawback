@@ -6,6 +6,8 @@ export interface Card {
   color: string;
   annual_fee: number;
   account_id: string | null;
+  /** Next renewal (YYYY-MM-DD) from the issuer's notice; rolled forward by year. */
+  renews_on?: string | null;
   sort: number;
 }
 

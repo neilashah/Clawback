@@ -119,6 +119,23 @@ describe("claimWorth", () => {
   });
 });
 
+describe("reconcileClaims with card anniversaries", () => {
+  it("files ✦ credits under the card year they were posted in", () => {
+    const delta: Card = { ...card("delta", "acct-plat"), renews_on: "2027-02-04" };
+    const cert: Benefit = { ...ben("cert", "delta", "companion", "annual", 300), name: "Companion Certificate ✦" };
+    const ch = reconcileClaims(
+      [txn("a", { benefit_id: "cert", date: "2027-01-20", amount: -100 }), txn("b", { benefit_id: "cert", date: "2027-02-10", amount: -50 })],
+      [cert],
+      [],
+      [delta],
+    );
+    expect(ch.inserts).toEqual([
+      { benefit_id: "cert", period: "2026", amount: 100 },
+      { benefit_id: "cert", period: "2027", amount: 50 },
+    ]);
+  });
+});
+
 describe("periodKey", () => {
   it("buckets dates", () => {
     const d = new Date(2026, 6, 4);

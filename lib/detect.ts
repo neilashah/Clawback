@@ -4,7 +4,7 @@
  * Kept free of I/O so it can be unit-tested. The server feeds it rows from the
  * database and applies the returned changes.
  */
-import { parseDay, periodKey } from "./periods";
+import { benefitPeriod, parseDay } from "./periods";
 import { usedAmount } from "./usage";
 import type { Benefit, Card, Claim, Txn } from "./types";
 
@@ -68,14 +68,15 @@ export interface ClaimChanges {
  * - Manual and dismissed claims are never touched (the user's word wins).
  * - Auto claims whose transactions disappeared are deleted.
  */
-export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Claim[]): ClaimChanges {
+export function reconcileClaims(txns: Txn[], benefits: Benefit[], existing: Claim[], cards: Card[] = []): ClaimChanges {
   const benefitById = new Map(benefits.map((b) => [b.id, b]));
+  const cardById = new Map(cards.map((c) => [c.id, c]));
   const totals = new Map<string, { benefit_id: string; period: string; amount: number }>();
   for (const t of txns) {
     if (!t.benefit_id || t.ignored) continue;
     const b = benefitById.get(t.benefit_id);
     if (!b) continue;
-    const period = periodKey(b.freq, parseDay(t.date));
+    const period = benefitPeriod(b, cardById.get(b.card_id), parseDay(t.date));
     const key = `${b.id}|${period}`;
     const cur = totals.get(key) ?? { benefit_id: b.id, period, amount: 0 };
     cur.amount = round2(cur.amount + -t.amount);

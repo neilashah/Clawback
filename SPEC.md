@@ -1,4 +1,4 @@
-# Clawback — SPEC (as of Nov 14, 2026, 12:22 AM ET)
+# Clawback — SPEC (as of Nov 16, 2026, 8:40 PM ET)
 
 > Living context document. Paste or point a new Claude Code / chat session at this file first.
 > Append notable changes to `CHANGELOG.md` (append-only); keep this file current as the source of truth.
@@ -13,7 +13,7 @@
 
 - Deployed at **https://clawbackbenefits.vercel.app** (Vercel, from `main`). Supabase migration `0001` run; magic-link login working; preset cards loaded.
 - **Plaid was dropped** (Nov 10, 2026): Production approval required a business-grade security questionnaire. Replaced by SimpleFIN Bridge (consumer sign-up, ~$15/yr, Chase + Amex confirmed supported) plus CSV upload. The Plaid application was abandoned.
-- Pending: run migration `0002_simplefin_csv.sql`, add `CRON_SECRET` (and optionally `ENCRYPTION_KEY`) in Vercel, remove `PLAID_*` vars, sign up for SimpleFIN and paste a setup token, link cards.
+- Pending: run migrations `0002_simplefin_csv.sql` and `0004_anniversary.sql`, enter renewal dates (Platinum 12-14-2026, Delta Reserve 02-04-2027, Marriott Brilliant 08-24-2027), add `CRON_SECRET` (and optionally `ENCRYPTION_KEY`) in Vercel, remove `PLAID_*` vars, sign up for SimpleFIN and paste a setup token, link cards.
 - Audience: owner + family (`ALLOWED_EMAILS`). Supabase's built-in email only reaches the Supabase account owner's address; family members need custom SMTP or invites.
 - Dark mode with a system/light/dark toggle (`lib/theme.ts`, `components/ThemeToggle.tsx`).
 - `SECURITY.md` was removed from the repo after Plaid was dropped.
@@ -40,15 +40,15 @@ lib/simplefin.ts             token claim, access-URL auth, fetch, mapping (tests
 lib/csv.ts                   Chase/Amex CSV parsing, stable IDs, dedupe (tests/csv.test.ts)
 lib/bankSync.ts              syncConnection / syncUser / runDetection (I/O)
 lib/periods.ts, preset.ts, crypto.ts, auth.ts, allowlist.ts, supabase/*
-supabase/migrations/0001_init.sql, 0002_simplefin_csv.sql
+supabase/migrations/0001_init.sql … 0004_anniversary.sql
 README.md, legacy/index.html
 ```
 
 ## Data model (Postgres, all RLS `user_id = auth.uid()`)
 
-- `cards(id, name, color, annual_fee, account_id, sort)`
+- `cards(id, name, color, annual_fee, account_id, renews_on, sort)` — `renews_on` (`0004`) = next renewal date from the issuer's notice; the app rolls it by whole years (`lib/periods.ts`), so it never needs re-entering.
 - `benefits(id, card_id, name, value, freq, match_terms, sort)` — `freq ∈ monthly|quarterly|semiannual|annual`; `match_terms` = `|`-separated, case-insensitive phrases.
-- `claims(id, benefit_id, period, source manual|auto, amount, dismissed)` — unique `(benefit_id, period)`. Period keys: `2026-06`, `2026-Q2`, `2026-H1`, `2026`. **Reset is emergent.**
+- `claims(id, benefit_id, period, source manual|auto, amount, dismissed)` — unique `(benefit_id, period)`. Period keys: `2026-06`, `2026-Q2`, `2026-H1`, `2026`. **Reset is emergent.** On a card with `renews_on`, annual **✦** credits are *anniversary* credits: their key is the calendar year in which the current card year started (Delta renewing Feb 4: Feb 4 2026 – Feb 3 2027 → `2026`), via `benefitPeriod()`; everything else stays on the calendar.
   - **`amount` semantics** (`lib/usage.ts`): `null` = fully used; a number = dollars used so far (partial use or auto-detected credit), capped at value. A benefit is *fully used* when used ≥ value (value-0 benefits: claim exists). Partly used credits stay under **Available** showing what's left; hero/column totals use remaining dollars; fee recoup counts used dollars.
 - `bank_connections(id, kind 'simplefin', access_url_enc, label, status, last_synced_at)` — access URL AES-256-GCM encrypted (`ENCRYPTION_KEY`, falls back to `PLAID_TOKEN_KEY`); column not granted to `authenticated`.
 - `bank_accounts(account_id, connection_id, name, org)` — ids `sf:<connection>:<simplefin id>` or `csv:<card id>`.
@@ -62,7 +62,7 @@ README.md, legacy/index.html
 4. Tapping an AUTO tile sets `dismissed=true`; tapping again restores.
 4a. **Partial use:** press-and-hold a tile (or right-click) opens a "record a use" sheet: add an amount (uses add up within the period), mark fully used, or clear. Tapping a partly used tile opens the same sheet. Recording a use converts an auto claim to manual so the user's number wins over later syncs.
 5. Unmatched credits → **Credits to review** (assign + optionally remember the description, or ignore).
-6. Fee recoup: manual claim = benefit value; auto claim = credited amount capped at value; calendar year.
+6. Fee recoup: manual claim = benefit value; auto claim = credited amount capped at value; counted per **card year** (last renewal → next) when `renews_on` is set, else calendar year. A claim belongs to the fee year holding the middle of its period (`countsTowardFee()`).
 
 Presets (`lib/preset.ts`): the `starter` set (Sapphire Reserve, Amex Platinum, Delta Reserve) loads via "Load my 3 cards"; other presets (currently **Marriott Brilliant**: $650 fee, $25/mo dining credit, Free Night Award ✦; property credit and Global Entry excluded) are added from **Cards → Add a known card**. Preset phrases are **unverified guesses** — tune from real descriptors via the review list. Uber Cash, DoorDash, Lyft, and Companion Certificate are manual only.
 
@@ -77,13 +77,14 @@ Presets (`lib/preset.ts`): the `starter` set (Sapphire Reserve, Amex Platinum, D
 
 - Daily, inside `/api/cron/sync` (after the bank sync): `runReminders` (`lib/remindersJob.ts`) emails each user whose credits entered their window, via Resend (`lib/email.ts`, plain fetch; `RESEND_API_KEY`, optional `REMINDER_FROM`).
 - Rules (`lib/reminders.ts`, tested): remaining > 0, value > 0, no ✦ in the name, days until reset ≤ 5 (monthly) or ≤ 14 (others), and not already in `reminders_sent` for that benefit+period. One email per user per day; rows are recorded only after a successful send.
-- Tables (`0003_reminders.sql`): `user_settings(user_id, reminders default true)`, `reminders_sent(benefit_id, period unique)`.
+- ✦ credits are never in the per-credit reminders. Instead, **renewal reminders** (`dueRenewals`) fire 60 and 30 days before each card's next renewal (≤, so a missed day still catches it; a late-entered date sends once and records every passed milestone), listing the card's ✦ credits not yet used this card year (incl. $0 variable ones). Bundled into the same daily email.
+- Tables (`0003_reminders.sql`): `user_settings(user_id, reminders default true)`, `reminders_sent(benefit_id, period unique)`; (`0004_anniversary.sql`) `renewal_reminders_sent(card_id, renews_on, days_before unique)`. Before `0004` runs, renewals are skipped quietly.
 - UI: footer switch (Email reminders on/off) and **Send a test reminder email** (`/api/reminders/test`, not recorded).
 - Resend without a verified domain only delivers to the Resend account's own email.
 
 ## UI structure
 
-Same visual language as v1 (`app/globals.css`, `bt-*` classes). Header: bank icon (Bank data sheet), Edit, Cards. Banner: connect prompt → review count → unlinked cards. Hero, fee bars, filters, cards × frequency grid (AUTO badge). Sheets: benefit editor (phrases), cards, card editor (linked account), bank data (SimpleFIN connect/sync/remove, CSV upload, review list), import-from-v1.
+Same visual language as v1 (`app/globals.css`, `bt-*` classes). Header: bank icon (Bank data sheet), Edit, Cards. Banner: connect prompt → review count → unlinked cards. Hero, fee bars, filters, cards × frequency grid (AUTO badge). Fee bars show "renews Dec 14"; ✦ tiles show their anniversary reset. Sheets: benefit editor (phrases), cards (renewal date in each row), card editor (fee, **renewal date**, linked account), bank data (SimpleFIN connect/sync/remove, CSV upload, review list), import-from-v1.
 
 ## Build / run / validate / deploy
 
@@ -105,8 +106,7 @@ Deploy: merge to `main` → Vercel auto-deploys. Env vars per `.env.example`.
 ## Roadmap / open items
 
 - Finish SimpleFIN setup; tune phrases from real credit descriptions.
-- True **anniversary-date** resets for `✦` items; per-benefit notes.
-- Expiration reminders (email digest via the daily cron).
+- Per-benefit notes.
 - Optional authenticator-app MFA (Supabase TOTP).
 
 ## Caveats
@@ -114,4 +114,4 @@ Deploy: merge to `main` → Vercel auto-deploys. Env vars per `.env.example`.
 - Benefit lists/fees reflect ~mid-2026; confirm with issuers.
 - SimpleFIN history depth depends on the bank via MX; use CSV to backfill older credits.
 - Merchant refunds on a linked card can false-match a phrase (dismiss or ignore).
-- Fee recoup counts by calendar year while real fees hit on the renewal date.
+- Cards without a renewal date (e.g. Sapphire Reserve) still use calendar years for ✦ credits and fee recoup.
