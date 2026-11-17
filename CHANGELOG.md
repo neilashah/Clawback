@@ -53,3 +53,10 @@ Append-only. Newest at the bottom.
 - Daily email (via Resend) when a credit with money left is about to reset: 5 days before for monthly credits, 14 days for the rest. One heads-up per credit per period, bundled into one email; ✦ and $0 credits skipped.
 - Footer switch to turn reminders on/off and a "Send a test reminder email" button.
 - Migration `0003_reminders.sql` (`user_settings`, `reminders_sent`); new env `RESEND_API_KEY`, optional `REMINDER_FROM`. Tests: 40 passing.
+
+## Nov 16, 2026, 8:40 PM ET — Card anniversary dates
+- Cards have a **Renewal date** (card editor; shown in the Cards list and fee bars). Stored once from the issuer's notice and rolled forward each year.
+- ✦ credits (Companion Certificate, Free Night Award, CSR Travel credit) reset on the card anniversary instead of Jan 1; ✦ tiles show the reset date. Auto-detection files them in the right card year.
+- "Annual fee recouped" counts by card year when a renewal date is set.
+- Renewal reminder emails 60 and 30 days before each renewal, listing unused ✦ credits; bundled into the daily reminder email and the test email.
+- Migration `0004_anniversary.sql` (`cards.renews_on`, `renewal_reminders_sent`). Tests: 55 passing.

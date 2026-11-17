@@ -107,7 +107,7 @@ export async function runDetection(admin: SupabaseClient, userId: string) {
     if (t) t.benefit_id = m.benefit_id;
   }
 
-  const ch = reconcileClaims(txns, benefits, claims);
+  const ch = reconcileClaims(txns, benefits, claims, cards);
   if (ch.inserts.length) {
     const { error } = await admin
       .from("claims")
